@@ -4,6 +4,7 @@
 
 int RunHelloWorld();         // Ultra-minimal test (hello_world.cpp)
 int RunSimpleTransaction();  // Comprehensive transaction app (simple_transaction.cpp)
+int RunWalletDetectionApp(); // Wallet detection with polling (main_with_wallet_detection.cpp)
 
 int main(int argc, char* argv[]){ 
   // Handle command-line arguments
@@ -31,6 +32,6 @@ int main(int argc, char* argv[]){
     }
   }
   
-  // Use simple transaction version - no complex state management
+  // Use the original comprehensive interface with integrated wallet detection
   return RunSimpleTransaction(); 
 }

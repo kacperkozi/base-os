@@ -1,2 +1,5 @@
 .local/**
 .vscode/**
+node_modules/
+build/
+ui/tui/build/
