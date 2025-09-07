@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 BUILD_DIR="${BUILD_DIR:-build}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
-USE_LOCAL_FTXUI="${USE_LOCAL_FTXUI:-ON}"
+USE_FETCHCONTENT_FTXUI="${USE_FETCHCONTENT_FTXUI:-OFF}"
 
 # Functions
 print_header() {
@@ -79,7 +79,7 @@ configure_cmake() {
     cmake .. \
         -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-        -DUSE_LOCAL_FTXUI="$USE_LOCAL_FTXUI"
+        -DUSE_FETCHCONTENT_FTXUI="$USE_FETCHCONTENT_FTXUI"
     
     if [ $? -eq 0 ]; then
         print_success "CMake configuration complete!"
@@ -175,7 +175,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --no-local-ftxui)
-            USE_LOCAL_FTXUI="OFF"
+            USE_FETCHCONTENT_FTXUI="ON"
             shift
             ;;
         --help|-h)
