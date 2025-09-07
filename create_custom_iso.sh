@@ -49,7 +49,7 @@ detect_architecture() {
 
 # --- Configuration ---
 ARCH="${ARCH:-$(detect_architecture)}"
-DEBIAN_VERSION="${DEBIAN_VERSION:-12}"
+DEBIAN_VERSION="${DEBIAN_VERSION:-11.11}"
 REPO_PATH="$(pwd)"
 WORK_DIR="${WORK_DIR:-./iso_work}"
 OUTPUT_ISO="custom-debian-live-${ARCH}.iso"
@@ -57,10 +57,10 @@ OUTPUT_ISO="custom-debian-live-${ARCH}.iso"
 # Architecture-specific ISO URLs
 case "$ARCH" in
     amd64)
-        ISO_URL="https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-${DEBIAN_VERSION}.0.0-amd64-xfce.iso"
+        ISO_URL="https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/debian-live-${DEBIAN_VERSION}.0-amd64-xfce.iso"
         ;;
     arm64)
-        ISO_URL="https://cdimage.debian.org/debian-cd/current-live/arm64/iso-hybrid/debian-live-${DEBIAN_VERSION}.0.0-arm64-xfce.iso"
+        ISO_URL="https://cdimage.debian.org/debian-cd/current-live/arm64/iso-hybrid/debian-live-${DEBIAN_VERSION}.0-arm64-xfce.iso"
         ;;
     *)
         print_error "Unsupported architecture: $ARCH"
@@ -68,7 +68,7 @@ case "$ARCH" in
         exit 1
         ;;
 esac
-ISO_FILENAME="debian-live-${DEBIAN_VERSION}.0.0-${ARCH}-xfce.iso"
+ISO_FILENAME="debian-live-${DEBIAN_VERSION}.0-${ARCH}-xfce.iso"
 
 print_info "========================================="
 print_info "  Debian Live ISO Creator"
@@ -87,14 +87,71 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # --- Install necessary tools ---
-print_info "Installing necessary tools..."
-if command -v apt-get &> /dev/null; then
+print_info "Checking and installing necessary tools..."
+
+# Detect the operating system
+OS_TYPE="$(uname -s)"
+
+if [ "$OS_TYPE" = "Darwin" ]; then
+    # macOS detected
+    print_warning "macOS detected - checking for required tools..."
+    
+    # Check if Homebrew is installed
+    if ! command -v brew &> /dev/null; then
+        print_error "Homebrew is required on macOS. Please install from https://brew.sh"
+        exit 1
+    fi
+    
+    # Check and install required tools
+    REQUIRED_TOOLS="wget xorriso squashfs rsync"
+    MISSING_TOOLS=""
+    
+    for tool in $REQUIRED_TOOLS; do
+        # Special case for squashfs-tools which is just 'squashfs' in Homebrew
+        check_tool="$tool"
+        if [ "$tool" = "squashfs" ]; then
+            check_tool="mksquashfs"
+        fi
+        
+        if ! command -v "$check_tool" &> /dev/null; then
+            MISSING_TOOLS="$MISSING_TOOLS $tool"
+        else
+            print_success "  ✓ $tool found"
+        fi
+    done
+    
+    if [ -n "$MISSING_TOOLS" ]; then
+        print_info "Installing missing tools:$MISSING_TOOLS"
+        brew install $MISSING_TOOLS
+    fi
+    
+    print_warning "Note: Creating Linux ISOs on macOS has limitations:"
+    print_warning "  - Cannot mount Linux filesystems natively"
+    print_warning "  - Cannot chroot into Linux environments"
+    print_warning "  - Recommended to use a Linux VM or Docker container"
+    print_info ""
+    print_info "Alternative: Use Docker to run this script in a Linux container:"
+    print_info "  docker run -it -v \$(pwd):/work debian:12 bash"
+    print_info "  cd /work && ./create_custom_iso.sh"
+    print_info ""
+    read -p "Continue anyway? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Exiting. Consider using a Linux environment."
+        exit 0
+    fi
+    
+elif command -v apt-get &> /dev/null; then
+    # Debian/Ubuntu
     apt-get update
     apt-get install -y wget xorriso squashfs-tools rsync isolinux syslinux-common
 elif command -v yum &> /dev/null; then
+    # Red Hat/CentOS/Fedora
     yum install -y wget xorriso squashfs-tools rsync syslinux
 else
-    print_error "Unsupported package manager. Please install: wget xorriso squashfs-tools rsync"
+    print_error "Unsupported package manager. Please manually install: wget xorriso squashfs-tools rsync"
+    print_info "Or run this script in a Docker container:"
+    print_info "  docker run -it -v \$(pwd):/work debian:12 bash"
     exit 1
 fi
 
