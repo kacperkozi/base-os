@@ -9,6 +9,8 @@
 #include <vector>
 #include <algorithm>
 #include <map>
+#include <sstream>
+#include "app/qr_generator.hpp"
 
 using namespace ftxui;
 
@@ -610,32 +612,68 @@ int RunSimpleTransaction() {
         break;
         
       case Screen::RESULT: {
-        // Mock QR code representation
+        // ============================================================================
+        // QR CODE DATA PLACEHOLDER - Replace this section with dynamic transaction data
+        // ============================================================================
+        
+        // TODO: Replace this hardcoded payload with actual signed transaction data
+        // This should come from the transaction signing process above
+        std::string qr_payload_data = R"({"type":"1","version":"1.0","data":{"hash":"0x1db03e193bc95ca525006ed6ccd619b3b9db060a959d5e5c987c807c992732d1","signature":{"r":"0xf827b2181487b88bcef666d5729a8b9fcb7ac7cfd94dd4c4e9e9dbcfc9be154d","s":"0x5981479fb853e3779b176e12cd6feb4424159679c6bf8f4f468f92f700d9722d","v":"0x422d"},"transaction":{"to":"0x8c47B9fADF822681C68f34fd9b0D3063569245A1","value":"0x01e078","nonce":23,"gasPrice":"0x019bfcc0","gasLimit":"0x5208","data":"0x","chainId":8453},"timestamp":1757205711661,"network":"base"},"checksum":"dee6a6184b7c1479"})";
+        
+        // ============================================================================
+        // QR CODE GENERATION - Using Nayuki QR Code Generator (MIT Licensed)
+        // ============================================================================
+        
+        // Generate high-quality QR code from the transaction payload
+        app::QRCode qr = app::GenerateQR(qr_payload_data);
+
+        // Render the QR code using a robust, font-independent ASCII method.
+        // This uses "##" for black modules and "  " for white modules to create
+        // a scannable QR code with a good aspect ratio in most terminals.
+        std::string qr_ascii = qr.toRobustAscii();
+        
+        // Convert QR code ASCII art to FTXUI display elements
         Elements qr_lines;
-        for (int i = 0; i < 8; i++) {
-          std::string qr_line = "";
-          for (int j = 0; j < 16; j++) {
-            qr_line += ((i + j) % 3 == 0) ? "██" : "  ";
+        std::istringstream qr_stream(qr_ascii);
+        std::string line;
+        while (std::getline(qr_stream, line)) {
+          if (!line.empty()) {
+            // Render black modules ("##") on a white background for scannability
+            qr_lines.push_back(text(line) | color(Color::Black) | bgcolor(Color::White));
           }
-          qr_lines.push_back(text(qr_line) | bgcolor(Color::Green) | color(Color::Black));
         }
         
+        // Mock signed transaction hex (for display purposes)
         std::string mock_signed_tx = "0xf86c0a8504a817c8008252089435353535353535353535353535353535880de0b6b3a76400008025a04f4c17305743700648bc4f6cd3038ec6f6af0df73e31757d8b9f8dc5c4c0c93739a06b6b6974e48386f05e5fcb2a13b61b5b4680a2b17b87b7101";
         
         content = vbox({
-          text("[SUCCESS] Transaction Signed Successfully") | bold | center | color(Color::Green),
+          text("🎉 TRANSACTION SIGNED SUCCESSFULLY 🎉") | bold | center | color(Color::Green),
           separator(),
           text(""),
-          text("QR Code") | center | bold,
+          
+          // QR Code Section
+          text("QR CODE FOR BROADCASTING") | center | bold | color(Color::Cyan),
+          text(""),
           vbox(qr_lines) | center | border,
           text(""),
-          text("Signed Transaction (Hex)") | center | bold,
-          text(mock_signed_tx.substr(0, 60) + "...") | center | color(Color::Cyan) | dim,
+          text("Scan with mobile device to broadcast transaction") | center | color(Color::GreenLight),
           text(""),
-          text("Scan the QR code with an internet-connected device to broadcast,") | center | color(Color::GreenLight),
-          text("or copy the hex string above.") | center | color(Color::GreenLight),
+          
+          separator(),
           text(""),
-          text("[Enter/q/r] Sign Another Transaction") | center | color(Color::Yellow)
+          
+          // Transaction Details Section  
+          text("📋 SIGNED TRANSACTION DATA") | center | bold | color(Color::Yellow),
+          text("Raw Hex (for manual broadcasting):") | center | dim,
+          text(mock_signed_tx.substr(0, 80) + "...") | center | color(Color::Cyan) | dim,
+          text(""),
+          text("Payload Size: " + std::to_string(qr_payload_data.length()) + " characters") | center | dim,
+          text("QR Code: " + std::to_string(qr.size) + "x" + std::to_string(qr.size) + " modules (ASCII)") | center | dim,
+          text(""),
+          
+          separator(),
+          text(""),
+          text("🔄 [Enter] Sign Another Transaction  |  [q] Quit") | center | color(Color::Yellow)
         });
         break;
       }
