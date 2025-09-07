@@ -28,7 +28,6 @@ import { useRouter } from "next/navigation";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import {
   type MultiQRState,
-  type QRPart,
   parseQRValue,
   createMultiQRState,
   updateMultiQRState,
@@ -187,10 +186,6 @@ export default function App() {
       if (validateAssembledData(multiQRState.assembledData)) {
         // Store assembled data with metadata
         const metadata = createPayloadMetadata(multiQRState);
-        const payloadData = {
-          data: multiQRState.assembledData,
-          metadata
-        };
         
         try {
           sessionStorage.setItem("decodedPayload", multiQRState.assembledData);
@@ -264,7 +259,7 @@ export default function App() {
         );
       }
     },
-    [closeScanner, router],
+    [handleQRDetection],
   );
 
   const openScanner = useCallback(async () => {
@@ -342,7 +337,7 @@ export default function App() {
         err instanceof Error ? err.message : "Unable to access camera",
       );
     }
-  }, [closeScanner, router]);
+  }, [handleQRDetection]);
 
   return (
     <div className="flex flex-col min-h-screen font-sans text-[var(--app-foreground)] mini-app-theme from-[var(--app-background)] to-[var(--app-gray)]">
