@@ -1,0 +1,161 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=JetBrains+Mono:wght@400;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* TUI Color Scheme */
+  --app-background: #000000;
+  --app-foreground: #22c55e;
+  --app-foreground-muted: #16a34a;
+  --app-foreground-secondary: #86efac;
+  --app-accent: #22c55e;
+  --app-accent-hover: #15803d;
+  --app-accent-active: #16a34a;
+  --app-accent-light: #052e16;
+  --app-gray: #052e16;
+  --app-gray-dark: #15803d;
+  --app-card-bg: rgba(5, 46, 22, 0.5);
+  --app-card-border: rgba(22, 163, 74, 0.5);
+  --app-blue: #60a5fa;
+  --app-purple: #a78bfa;
+  --app-orange: #fb923c;
+  --app-cyan: #22d3ee;
+  --app-yellow: #facc15;
+  --app-red: #ef4444;
+  --app-focus: #bbf7d0;
+  --app-disabled: #6b7280;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Same palette in dark mode for TUI */
+    --app-background: #000000;
+    --app-foreground: #22c55e;
+    --app-foreground-muted: #16a34a;
+    --app-foreground-secondary: #86efac;
+    --app-accent: #22c55e;
+    --app-accent-hover: #15803d;
+    --app-accent-active: #16a34a;
+    --app-accent-light: #052e16;
+    --app-gray: #052e16;
+    --app-gray-dark: #15803d;
+    --app-card-bg: rgba(5, 46, 22, 0.5);
+    --app-card-border: rgba(22, 163, 74, 0.5);
+  }
+}
+
+.mini-app-theme {
+  --ock-font-family: "Geist", sans-serif;
+  --ock-border-radius: 0.75rem;
+  --ock-border-radius-inner: 0.5rem;
+
+  /* Text colors */
+  --ock-text-inverse: var(--app-background);
+  --ock-text-foreground: var(--app-foreground);
+  --ock-text-foreground-muted: var(--app-foreground-muted);
+  --ock-text-error: var(--app-red);
+  --ock-text-primary: var(--app-accent);
+  --ock-text-success: #22c55e;
+  --ock-text-warning: var(--app-yellow);
+  --ock-text-disabled: var(--app-disabled);
+
+  /* Background colors */
+  --ock-bg-default: var(--app-background);
+  --ock-bg-default-hover: var(--app-gray);
+  --ock-bg-default-active: var(--app-gray-dark);
+  --ock-bg-alternate: var(--app-gray);
+  --ock-bg-alternate-hover: var(--app-gray-dark);
+  --ock-bg-alternate-active: var(--app-gray-dark);
+  --ock-bg-inverse: var(--app-foreground);
+  --ock-bg-inverse-hover: #15803d;
+  --ock-bg-inverse-active: #16a34a;
+  --ock-bg-primary: var(--app-accent);
+  --ock-bg-primary-hover: var(--app-accent-hover);
+  --ock-bg-primary-active: var(--app-accent-active);
+  --ock-bg-primary-washed: var(--app-accent-light);
+  --ock-bg-primary-disabled: var(--app-disabled);
+  --ock-bg-secondary: var(--app-gray);
+  --ock-bg-secondary-hover: var(--app-gray-dark);
+  --ock-bg-secondary-active: #0b3a23;
+  --ock-bg-error: rgba(239, 68, 68, 0.15);
+  --ock-bg-warning: rgba(250, 204, 21, 0.15);
+  --ock-bg-success: rgba(34, 197, 94, 0.15);
+  --ock-bg-default-reverse: var(--app-foreground);
+
+  /* Icon colors */
+  --ock-icon-color-primary: var(--app-accent);
+  --ock-icon-color-foreground: var(--app-foreground);
+  --ock-icon-color-foreground-muted: var(--app-foreground-muted);
+  --ock-icon-color-inverse: var(--app-background);
+  --ock-icon-color-error: var(--app-red);
+  --ock-icon-color-success: #22c55e;
+  --ock-icon-color-warning: var(--app-yellow);
+
+  /* Line colors */
+  --ock-line-primary: var(--app-accent);
+  --ock-line-default: #15803d;
+  --ock-line-heavy: #16a34a;
+  --ock-line-inverse: #86efac;
+}
+
+* {
+  touch-action: manipulation;
+}
+
+body {
+  color: var(--app-foreground);
+  background: var(--app-background);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* Developer-style monospace utility */
+.font-jetbrains {
+  font-family:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ASCII banner sizing that shrinks on small screens */
+.ascii-banner {
+  font-size: clamp(10px, 2.2vw, 14px);
+  line-height: 1.05;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.animate-fade-out {
+  animation: fadeOut 3s forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
