@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: var(--app-background);
+  --foreground: var(--app-foreground);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: var(--app-background);
+    --foreground: var(--app-foreground);
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: "Geist", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+  font-size: 80%;
+}
