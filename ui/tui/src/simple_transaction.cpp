@@ -271,6 +271,9 @@ int RunSimpleTransaction() {
   // Create a container with the actual input components
   auto input_container = Container::Vertical(form_inputs);
   
+  // Set the first input as active/focused by default
+  input_container->SetActiveChild(to_address_input);
+  
   // Event handling for comprehensive keyboard navigation
   auto main_component = CatchEvent(input_container, [&](Event event) {
     // Handle confirmation dialog
@@ -345,7 +348,8 @@ int RunSimpleTransaction() {
         autocomplete_index = (autocomplete_index - 1 + autocomplete_results.size()) % autocomplete_results.size();
         return true;
       }
-      if (event == Event::Tab) {
+      // Use Enter to select autocomplete, not Tab (Tab should navigate fields)
+      if (event == Event::Return) {
         if (!autocomplete_results.empty()) {
           form_data["toAddress"] = autocomplete_results[autocomplete_index].address;
           show_autocomplete = false;
@@ -356,32 +360,75 @@ int RunSimpleTransaction() {
         show_autocomplete = false;
         return true;
       }
+      // Don't block Tab - let it navigate to next field
+      if (event == Event::Tab || event == Event::TabReverse) {
+        show_autocomplete = false; // Close autocomplete and move to next field
+        return false;
+      }
       // Don't block character input - let it pass through to the input field
       if (event.is_character()) {
         return false;
       }
     }
     
-    // Global navigation keys
-    if (event == Event::Character('?') || event.input() == "F1") {
+    // Transaction input form navigation - MUST COME BEFORE GLOBAL KEYS
+    if (current_screen == Screen::TRANSACTION_INPUT) {
+      // Special: F2 to continue to next screen
+      if (event.input() == "F2") {
+        navigate_to_screen(Screen::CONFIRMATION);
+        return true;
+      }
+      // Track Tab navigation for visual focus indicator
+      if (event == Event::Tab) {
+        focused_element = (focused_element + 1) % 5;
+        return false; // Still let the container handle tab navigation
+      }
+      if (event == Event::TabReverse) {
+        focused_element = (focused_element - 1 + 5) % 5;
+        return false; // Still let the container handle tab navigation
+      }
+      // Let arrow keys and typing be handled by the input container
+      if (event == Event::ArrowDown || event == Event::ArrowUp) {
+        return false; // Let the container handle arrow navigation
+      }
+      // CRITICAL: Allow Backspace for text deletion
+      if (event == Event::Backspace) {
+        return false; // Let the input handle backspace for deletion
+      }
+      // Allow Enter to work in input fields (for multiline or submit)
+      if (event == Event::Return) {
+        return false; // Let the input handle enter
+      }
+      // Allow ALL character input to pass through to the focused input
+      // This includes j, k, ?, and any other character
+      if (event.is_character()) {
+        return false; // Let the input handle the character
+      }
+    }
+    
+    // Global navigation keys - disabled during transaction input for certain keys
+    if ((event == Event::Character('?') || event.input() == "F1") && current_screen != Screen::TRANSACTION_INPUT) {
       show_help = !show_help;
       return true;
     }
     
-    if (event == Event::Character(':')) {
-      command_mode = true;
-      command_buffer = "";
-      return true;
-    }
-    
-    if (event == Event::Character('q')) {
-      show_confirm_dialog = true;
-      confirm_dialog_message = "Are you sure you want to quit?";
-      return true;
+    // Only allow command mode and quit when not typing
+    if (current_screen != Screen::TRANSACTION_INPUT) {
+      if (event == Event::Character(':')) {
+        command_mode = true;
+        command_buffer = "";
+        return true;
+      }
+      
+      if (event == Event::Character('q')) {
+        show_confirm_dialog = true;
+        confirm_dialog_message = "Are you sure you want to quit?";
+        return true;
+      }
     }
     
     // Screen-specific navigation
-    if (event == Event::Return) {
+    if (event == Event::Return && current_screen != Screen::TRANSACTION_INPUT) {
       switch (current_screen) {
         case Screen::CONNECT_WALLET:
           navigate_to_screen(Screen::USB_CONTACTS);
@@ -395,8 +442,8 @@ int RunSimpleTransaction() {
           }
           return true;
         case Screen::TRANSACTION_INPUT:
-          navigate_to_screen(Screen::CONFIRMATION);
-          return true;
+          // This case won't be reached due to the condition above
+          return false;
         case Screen::CONFIRMATION:
           if (!is_signing) {
             execute_signing_script();
@@ -416,17 +463,32 @@ int RunSimpleTransaction() {
       }
     }
     
-    if (event == Event::Escape || event == Event::Character('b') || event == Event::Backspace) {
+    // Only use Escape for back (Backspace needed for text deletion)
+    if (event == Event::Escape) {
       go_back();
       return true;
     }
     
-    // Screen navigation shortcuts
-    if (event == Event::Character('1')) { navigate_to_screen(Screen::CONNECT_WALLET); return true; }
-    if (event == Event::Character('2')) { navigate_to_screen(Screen::USB_CONTACTS); return true; }
-    if (event == Event::Character('3')) { navigate_to_screen(Screen::TRANSACTION_INPUT); return true; }
-    if (event == Event::Character('4')) { navigate_to_screen(Screen::CONFIRMATION); return true; }
-    if (event == Event::Character('5')) { navigate_to_screen(Screen::RESULT); return true; }
+    // Only allow Backspace for back when not in transaction input
+    if (event == Event::Backspace && current_screen != Screen::TRANSACTION_INPUT) {
+      go_back();
+      return true;
+    }
+    
+    // Only allow 'b' for back when not in transaction input
+    if (event == Event::Character('b') && current_screen != Screen::TRANSACTION_INPUT) {
+      go_back();
+      return true;
+    }
+    
+    // Screen navigation shortcuts - disabled during transaction input
+    if (current_screen != Screen::TRANSACTION_INPUT) {
+      if (event == Event::Character('1')) { navigate_to_screen(Screen::CONNECT_WALLET); return true; }
+      if (event == Event::Character('2')) { navigate_to_screen(Screen::USB_CONTACTS); return true; }
+      if (event == Event::Character('3')) { navigate_to_screen(Screen::TRANSACTION_INPUT); return true; }
+      if (event == Event::Character('4')) { navigate_to_screen(Screen::CONFIRMATION); return true; }
+      if (event == Event::Character('5')) { navigate_to_screen(Screen::RESULT); return true; }
+    }
     
     // USB contacts navigation
     if (current_screen == Screen::USB_CONTACTS && !contacts.empty()) {
@@ -440,34 +502,6 @@ int RunSimpleTransaction() {
       }
     }
     
-    // Transaction input form navigation
-    if (current_screen == Screen::TRANSACTION_INPUT) {
-      // Let the container handle Tab navigation naturally
-      if (event == Event::Tab || event == Event::TabReverse) {
-        return false; // Let the container handle tab navigation
-      }
-      // Custom navigation with j/k keys
-      if (event == Event::Character('j')) {
-        focused_element = (focused_element + 1) % 5;
-        // Send a Tab event to move focus to next input
-        input_container->OnEvent(Event::Tab);
-        return true;
-      }
-      if (event == Event::Character('k')) {
-        focused_element = (focused_element - 1 + 5) % 5;
-        // Send a TabReverse event to move focus to previous input
-        input_container->OnEvent(Event::TabReverse);
-        return true;
-      }
-      // Let arrow keys and typing be handled by the input container
-      if (event == Event::ArrowDown || event == Event::ArrowUp) {
-        return false; // Let the container handle arrow navigation
-      }
-      // Allow character input to pass through to the focused input
-      if (event.is_character()) {
-        return false; // Let the input handle the character
-      }
-    }
     
     // USB scan shortcut
     if (event == Event::Character('u') && current_screen == Screen::USB_CONTACTS) {
@@ -670,7 +704,7 @@ int RunSimpleTransaction() {
           
           form_elements.push_back(text(""));
           form_elements.push_back(vbox(autocomplete_elements) | border | color(Color::Yellow));
-          form_elements.push_back(text("Use j/k or ↓↑ to navigate • Tab to select • Esc to close") | center | dim | color(Color::Yellow));
+          form_elements.push_back(text("Use ↓↑ to navigate • Enter to select • Esc to close") | center | dim | color(Color::Yellow));
         }
         
         content = vbox({
@@ -680,11 +714,11 @@ int RunSimpleTransaction() {
           vbox(form_elements),
           text(""),
           hbox({
-            text("[Esc/b/⌫] Back") | color(Color::Yellow),
+            text("[Esc] Back") | color(Color::Yellow),
             text("  "),
-            text("[Tab/j/k] Navigate") | color(Color::Blue),
+            text("[Tab] Navigate") | color(Color::Blue),
             text("  "),
-            text("[Enter] Continue") | color(Color::Green)
+            text("[F2] Continue") | color(Color::Green)
           }) | center
         });
         break;
