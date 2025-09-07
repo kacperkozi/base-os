@@ -193,10 +193,10 @@ echo "  • Ctrl+C: Quit"
 echo ""
 
 echo -e "${CYAN}📦 ISO Deployment:${NC}"
-echo "  - All dependencies vendored in third-party/"
-echo "  - No internet required for builds"
-echo "  - Works on x86_64 and ARM64 Ubuntu"
-echo "  - Self-contained and portable"
+echo "  • All dependencies vendored in third-party/"
+echo "  • No internet required for builds"
+echo "  • Works on x86_64 and ARM64 Ubuntu"
+echo "  • Self-contained and portable"
 echo ""
 
 # Ask if user wants to test now

@@ -2,11 +2,8 @@
 #include <iostream>
 #include <string>
 
-int RunApp();                // Original implementation (views_new.cpp)
-int RunThreadSafeApp();      // Thread-safe implementation (views_thread_safe.cpp)
-int RunMinimalApp();         // Minimal MVP implementation (views_minimal.cpp)
 int RunHelloWorld();         // Ultra-minimal test (hello_world.cpp)
-int RunSimpleTransaction();  // Simple transaction app (simple_transaction.cpp)
+int RunSimpleTransaction();  // Comprehensive transaction app (simple_transaction.cpp)
 
 int main(int argc, char* argv[]){ 
   // Handle command-line arguments
@@ -37,4 +34,3 @@ int main(int argc, char* argv[]){
   // Use simple transaction version - no complex state management
   return RunSimpleTransaction(); 
 }
-
