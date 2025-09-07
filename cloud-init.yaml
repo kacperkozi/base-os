@@ -1,0 +1,84 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+packages:
+  - git
+  - sudo
+  - cmake
+  - build-essential
+  - libusb-1.0-0-dev
+  - tar
+  - curl
+  - wget
+  - unzip
+  - bash
+  - coreutils
+  - vim-tiny
+  - less
+  - net-tools
+  - iproute2
+  - tzdata
+
+write_files:
+  - path: /usr/local/bin/build_in_ram.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      echo "[+] Mount devpts for sudo"
+      mount -t devpts devpts /dev/pts || true
+
+      echo "[+] Cloning base-os repo"
+      cd /tmp
+      git clone https://github.com/kacperkozi/base-os.git
+      cd base-os
+
+      echo "[+] Running setup scripts"
+      bash setup.sh
+      bash build_production.sh
+
+      echo "[+] Building TUI"
+      cd ui/tui
+      mkdir -p vendor
+      cd vendor
+      tar -xvf ftxui-6.1.9.tar.gz
+      mv FTXUI-6.1.9 ftxui-6.1.9
+      cd ..
+      cmake -B build && make -C build
+
+      echo "[+] Installing libusb dev library"
+      apt-get install -y libusb-1.0-0-dev
+      echo "libusb-1.0-0-dev" >> config/package-lists/custom.list.chroot
+
+      echo "[+] Rebuilding TUI after libusb install"
+      cd ui/tui
+      cmake -B build && make -C build
+
+      echo "[+] Installing NVM and Node.js"
+      export NVM_DIR="$HOME/.nvm"
+      curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+      [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+      nvm install v22.19.0
+      nvm use v22.19.0
+      npm i -ddd
+
+      echo "[+] Cleaning APT cache from RAM"
+      apt-get clean
+      rm -rf /var/lib/apt/lists/*
+
+      echo "[+] Removing network drivers to disable networking"
+      for drv in e1000e igb r8169 r8168 r8169e; do
+        modprobe -r $drv || true
+      done
+      KVER=$(uname -r)
+      rm -rf /lib/modules/$KVER/kernel/drivers/net/ethernet/*
+
+      echo "[+] Build completed. System now isolated in RAM."
+
+runcmd:
+  - [ bash, /usr/local/bin/build_in_ram.sh ]
+
+final_message: "Cloud-init finished. Application built in RAM; network drivers removed."
+
