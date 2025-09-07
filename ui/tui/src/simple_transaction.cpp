@@ -314,7 +314,16 @@ int RunSimpleTransaction() {
         command += " --chainId 8453";
         command += " --quiet";
         
-        std::cout << "Executing command: " << command << std::endl;
+        std::cout << "\n=== DEBUG: Executing TypeScript Signing Script ===" << std::endl;
+        std::cout << "Command: " << command << std::endl;
+        std::cout << "Working directory: " << script_path << std::endl;
+        std::cout << "Parameters:" << std::endl;
+        std::cout << "  --to: " << (form_data["toAddress"].empty() ? "(empty)" : form_data["toAddress"]) << std::endl;
+        std::cout << "  --amount: " << (form_data["amount"].empty() ? "(empty)" : form_data["amount"]) << std::endl;
+        std::cout << "  --nonce: " << (form_data["nonce"].empty() ? "(empty)" : form_data["nonce"]) << std::endl;
+        std::cout << "  --chainId: 8453" << std::endl;
+        std::cout << "  --quiet: true" << std::endl;
+        std::cout << "================================================" << std::endl;
         
         // Execute the command and capture output
         std::string output = execCommand(command);
@@ -322,7 +331,10 @@ int RunSimpleTransaction() {
         // Store the output as the transaction result
         tx_hash = output;
         
-        std::cout << "Script output: " << output << std::endl;
+        std::cout << "\n=== DEBUG: Script Output ===" << std::endl;
+        std::cout << "Output length: " << output.length() << " characters" << std::endl;
+        std::cout << "Output: " << output << std::endl;
+        std::cout << "=============================" << std::endl;
         
       } catch (const std::exception& e) {
         tx_hash = "Error executing signing script: " + std::string(e.what());
@@ -792,6 +804,19 @@ int RunSimpleTransaction() {
         
       case Screen::CONFIRMATION:
         if (is_signing) {
+          // Build the command string for display
+          std::string display_command = "npx ts-node eth-signer-cli.ts";
+          if (!form_data["toAddress"].empty()) {
+            display_command += " --to " + form_data["toAddress"];
+          }
+          if (!form_data["amount"].empty()) {
+            display_command += " --amount " + form_data["amount"];
+          }
+          if (!form_data["nonce"].empty()) {
+            display_command += " --nonce " + form_data["nonce"];
+          }
+          display_command += " --chainId 8453 --quiet";
+          
           content = vbox({
             text("") | center,
             text("[SIGN]") | center | size(HEIGHT, EQUAL, 3),
@@ -802,7 +827,7 @@ int RunSimpleTransaction() {
             text("") | center,
             text("Please wait, do not close the application") | center | dim,
             text("") | center,
-            text("Executing: npx ts-node eth-signer-cli.ts") | center | dim,
+            text("Command: " + display_command) | center | dim | color(Color::Cyan),
             text("") | center,
             text("Awaiting device confirmation...") | center | dim
           });
