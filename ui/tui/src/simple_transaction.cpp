@@ -495,12 +495,19 @@ int RunSimpleTransaction() {
       }
     }
     
-    // Handle escape/back navigation (but not when typing in input fields)
-    if (current_screen != Screen::TRANSACTION_INPUT || !form_inputs[focused_element]->Focused()) {
-      if (event == Event::Escape || event == Event::Character('b')) {
-        go_back();
-        return true;
+    // Handle escape/back navigation
+    if (event == Event::Escape || event == Event::Character('b')) {
+      // If we're in an input field and it has content, clear it first
+      if (current_screen == Screen::TRANSACTION_INPUT && form_inputs[focused_element]->Focused()) {
+        std::vector<std::string> field_keys = {"toAddress", "amount", "nonce", "gasPrice", "gasLimit"};
+        if (!form_data[field_keys[focused_element]].empty()) {
+          form_data[field_keys[focused_element]] = "";
+          return true;
+        }
       }
+      // Otherwise, go back
+      go_back();
+      return true;
     }
     
     // Screen navigation shortcuts (only when not actively typing in input fields)
@@ -712,8 +719,26 @@ int RunSimpleTransaction() {
           "toAddress", "amount", "nonce", "gasPrice", "gasLimit"
         };
         
-        // Use the proper component structure for input handling
-        auto form_component = transaction_form->Render();
+        // Create styled form elements with proper component structure
+        Elements form_elements;
+        
+        for (size_t i = 0; i < field_labels.size(); i++) {
+          bool is_focused = focused_element == (int)i;
+          
+          auto field_element = hbox({
+            text(is_focused ? "► " : "  "),
+            text("[" + std::to_string(i+1) + "] " + field_labels[i]) | size(WIDTH, EQUAL, 20) | 
+              (is_focused ? color(Color::GreenLight) | bold : color(Color::Green)),
+            form_inputs[i]->Render() | (is_focused ? bgcolor(Color::Green) | color(Color::Black) : color(Color::GreenLight))
+          });
+          
+          form_elements.push_back(field_element);
+          if (i < field_labels.size() - 1) {
+            form_elements.push_back(text(""));
+          }
+        }
+        
+        auto form_component = vbox(form_elements);
         
         // Add autocomplete dropdown
         Elements autocomplete_elements;
