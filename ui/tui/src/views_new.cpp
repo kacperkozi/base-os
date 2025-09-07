@@ -864,7 +864,17 @@ Component ResultView(AppState& s) {
     // QR Code
     if (!s.signed_hex.empty()) {
       auto qrCode = app::GenerateQR(s.signed_hex);
-      std::string qrAscii = qrCode.toASCII();
+      
+      // Determine which QR code to use based on terminal width
+      auto screen = ScreenInteractive::FitComponent();
+      int width = screen.dimx();
+      
+      std::string qrAscii;
+      if (width < qrCode.size * 2 + 8) { // 2 chars per module + quiet zone
+        qrAscii = qrCode.toCompactAscii();
+      } else {
+        qrAscii = qrCode.toRobustAscii();
+      }
       
       std::istringstream stream(qrAscii);
       std::string line;

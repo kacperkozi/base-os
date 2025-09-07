@@ -3,7 +3,74 @@
 #include <sstream>
 
 namespace app {
-  QRCode GenerateQR(const std::string& data) {
+
+std::string QRCode::toRobustAscii() const {
+  if (modules.empty()) return "(No QR data)";
+  
+  std::string result;
+  const std::string black = "##";
+  const std::string white = "  ";
+  const int quiet_zone = 4;
+
+  auto draw_horizontal_border = [&]() {
+    for (int i = 0; i < quiet_zone; ++i) {
+      for (int j = 0; j < size + 2 * quiet_zone; ++j) {
+        result += white;
+      }
+      result += '\n';
+    }
+  };
+
+  draw_horizontal_border();
+
+  for (int y = 0; y < size; ++y) {
+    for (int i = 0; i < quiet_zone; ++i) result += white;
+    for (int x = 0; x < size; ++x) {
+      result += modules[y][x] ? black : white;
+    }
+    for (int i = 0; i < quiet_zone; ++i) result += white;
+    result += '\n';
+  }
+
+  draw_horizontal_border();
+  
+  return result;
+}
+
+std::string QRCode::toCompactAscii() const {
+  if (modules.empty()) return "(No QR data)";
+  
+  std::string result;
+  const std::string black = "█";
+  const std::string white = " ";
+  const int quiet_zone = 2;
+
+  auto draw_horizontal_border = [&]() {
+    for (int i = 0; i < quiet_zone; ++i) {
+      for (int j = 0; j < size + 2 * quiet_zone; ++j) {
+        result += white;
+      }
+      result += '\n';
+    }
+  };
+
+  draw_horizontal_border();
+
+  for (int y = 0; y < size; ++y) {
+    for (int i = 0; i < quiet_zone; ++i) result += white;
+    for (int x = 0; x < size; ++x) {
+      result += modules[y][x] ? black : white;
+    }
+    for (int i = 0; i < quiet_zone; ++i) result += white;
+    result += '\n';
+  }
+
+  draw_horizontal_border();
+  
+  return result;
+}
+  
+QRCode GenerateQR(const std::string& data) {
   QRCode qr;
   
   try {
