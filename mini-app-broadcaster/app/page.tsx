@@ -22,9 +22,20 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Button } from "./components/DemoComponents";
 import { Icon } from "./components/DemoComponents";
 import { Features } from "./components/DemoComponents";
+import { MultiQRProgress, Toast } from "./components/MultiQRProgress";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BrowserQRCodeReader } from "@zxing/browser";
+import {
+  type MultiQRState,
+  parseQRValue,
+  createMultiQRState,
+  updateMultiQRState,
+  resetMultiQRState,
+  validateAssembledData,
+  hasMultiQRTimedOut,
+  createPayloadMetadata
+} from "@/lib/multi-qr";
 
 // Minimal typings for the BarcodeDetector API to avoid 'any'
 type QRDetector = {
@@ -52,6 +63,11 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const zxingReaderRef = useRef<BrowserQRCodeReader | null>(null);
   const zxingAbortRef = useRef<AbortController | null>(null);
+  
+  // Multi-QR state
+  const [scanningMode, setScanningMode] = useState<'single' | 'multi'>('single');
+  const [multiQRState, setMultiQRState] = useState<MultiQRState>(createMultiQRState());
+  const [toastMessage, setToastMessage] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
 
   const addFrame = useAddFrame();
   const openUrl = useOpenUrl();
@@ -102,6 +118,101 @@ export default function App() {
     zxingReaderRef.current = null;
   }, []);
 
+  // Enhanced QR detection logic for multi-part support
+  const handleQRDetection = useCallback((value: string) => {
+    console.log('QR detected:', value);
+    
+    // Try to parse as multi-part QR
+    const qrPart = parseQRValue(value);
+    
+    if (qrPart) {
+      // Multi-part QR detected
+      console.log(`Multi-part QR detected: Part ${qrPart.part} of ${qrPart.totalParts}`);
+      setScanningMode('multi');
+      
+      setMultiQRState(prev => {
+        // Check for duplicate
+        if (prev.parts.has(qrPart.part)) {
+          setToastMessage({ 
+            message: `Part ${qrPart.part} already scanned`, 
+            type: 'warning' 
+          });
+          return { ...prev, lastScanTime: Date.now() };
+        }
+        
+        const newState = updateMultiQRState(prev, qrPart);
+        
+        // Show success toast for new part
+        setToastMessage({ 
+          message: `Part ${qrPart.part} of ${qrPart.totalParts} collected`, 
+          type: 'success' 
+        });
+        
+        return newState;
+      });
+    } else {
+      // Single QR code (current flow)
+      console.log('Single QR detected');
+      setDecodedPayload(value);
+      try {
+        sessionStorage.setItem("decodedPayload", value);
+      } catch {}
+      closeScanner();
+      router.push("/broadcast");
+    }
+  }, [router]);
+
+  // Auto-reset multi-QR state on timeout
+  useEffect(() => {
+    if (scanningMode === 'multi' && multiQRState.parts.size > 0) {
+      const timeoutId = setTimeout(() => {
+        if (hasMultiQRTimedOut(multiQRState)) {
+          setToastMessage({ 
+            message: 'Scan timed out. Resetting...', 
+            type: 'warning' 
+          });
+          setMultiQRState(resetMultiQRState());
+          setScanningMode('single');
+        }
+      }, 61000);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [multiQRState.lastScanTime, scanningMode, multiQRState]);
+
+  // Handle multi-QR completion
+  const handleMultiQRComplete = useCallback(() => {
+    if (multiQRState.isComplete && multiQRState.assembledData) {
+      if (validateAssembledData(multiQRState.assembledData)) {
+        // Store assembled data with metadata
+        const metadata = createPayloadMetadata(multiQRState);
+        
+        try {
+          sessionStorage.setItem("decodedPayload", multiQRState.assembledData);
+          sessionStorage.setItem("payloadMetadata", JSON.stringify(metadata));
+        } catch {}
+        
+        closeScanner();
+        router.push("/broadcast");
+      } else {
+        setToastMessage({ 
+          message: 'Invalid transaction data. Please try again.', 
+          type: 'error' 
+        });
+      }
+    }
+  }, [multiQRState, router]);
+
+  // Reset multi-QR state
+  const handleMultiQRReset = useCallback(() => {
+    setMultiQRState(resetMultiQRState());
+    setScanningMode('single');
+    setToastMessage({ 
+      message: 'Multi-QR scan reset', 
+      type: 'warning' 
+    });
+  }, []);
+
   const closeScanner = useCallback(() => {
     setIsScannerOpen(false);
     stopZxing();
@@ -114,7 +225,13 @@ export default function App() {
       rafIdRef.current = null;
     }
     detectorRef.current = null;
-  }, [stopZxing]);
+    
+    // Reset multi-QR state when closing scanner
+    if (scanningMode === 'multi' && !multiQRState.isComplete) {
+      setMultiQRState(resetMultiQRState());
+      setScanningMode('single');
+    }
+  }, [stopZxing, scanningMode, multiQRState.isComplete]);
 
   const handleImageUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -134,12 +251,7 @@ export default function App() {
         const result = await reader.decodeFromCanvas(canvas);
         const value = result.getText();
         if (value) {
-          setDecodedPayload(value);
-          try {
-            sessionStorage.setItem("decodedPayload", value);
-          } catch {}
-          closeScanner();
-          router.push("/broadcast");
+          handleQRDetection(value);
         }
       } catch (err) {
         setCameraError(
@@ -147,7 +259,7 @@ export default function App() {
         );
       }
     },
-    [closeScanner, router],
+    [handleQRDetection],
   );
 
   const openScanner = useCallback(async () => {
@@ -184,12 +296,7 @@ export default function App() {
             if (results && results.length > 0) {
               const value = results[0].rawValue;
               if (value) {
-                setDecodedPayload(value);
-                try {
-                  sessionStorage.setItem("decodedPayload", value);
-                } catch {}
-                closeScanner();
-                router.push("/broadcast");
+                handleQRDetection(value);
                 return;
               }
             }
@@ -215,12 +322,7 @@ export default function App() {
             if (result) {
               const value = result.getText();
               if (value) {
-                setDecodedPayload(value);
-                try {
-                  sessionStorage.setItem("decodedPayload", value);
-                } catch {}
-                closeScanner();
-                router.push("/broadcast");
+                handleQRDetection(value);
               }
             }
           },
@@ -235,7 +337,7 @@ export default function App() {
         err instanceof Error ? err.message : "Unable to access camera",
       );
     }
-  }, [closeScanner, router]);
+  }, [handleQRDetection]);
 
   return (
     <div className="flex flex-col min-h-screen font-sans text-[var(--app-foreground)] mini-app-theme from-[var(--app-background)] to-[var(--app-gray)]">
@@ -405,9 +507,27 @@ export default function App() {
                 </div>
                 <canvas ref={canvasRef} className="hidden" />
               </div>
+              
+              {/* Multi-QR Progress */}
+              {scanningMode === 'multi' && (
+                <MultiQRProgress 
+                  state={multiQRState}
+                  onReset={handleMultiQRReset}
+                  onComplete={handleMultiQRComplete}
+                />
+              )}
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Toast Messages */}
+      {toastMessage && (
+        <Toast
+          message={toastMessage.message}
+          type={toastMessage.type}
+          onClose={() => setToastMessage(null)}
+        />
       )}
     </div>
   );

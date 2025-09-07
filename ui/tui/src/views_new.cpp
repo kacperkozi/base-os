@@ -889,8 +889,20 @@ Component ResultView(AppState& s) {
         auto& qrCode = s.qr_codes[current_qr_part];
         
         if (qrCode.size > 0) {
-          // Always use compact ASCII for multi-part QR codes to ensure they fit
-          std::string qrAscii = qrCode.toCompactAscii();
+
+          // Determine which QR code to use based on terminal width and multi-part status
+          auto screen = ScreenInteractive::FitComponent();
+          int width = screen.dimx();
+          
+          std::string qrAscii;
+          // For multi-part QR codes, prefer compact to ensure all parts fit
+          // For single QR codes, use adaptive logic as per changes.md
+          if (qrCode.total_parts > 1 || width < qrCode.size * 2 + 8) {
+            qrAscii = qrCode.toCompactAscii();
+          } else {
+            qrAscii = qrCode.toRobustAscii();
+          }
+
           
           std::istringstream stream(qrAscii);
           std::string line;
