@@ -233,6 +233,7 @@ int RunSimpleTransaction() {
         }
         // Add default chainId for Base (8453)
         command += " --chainId 8453";
+        command += " --quiet";
         
         std::cout << "Executing command: " << command << std::endl;
         
