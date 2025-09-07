@@ -345,8 +345,17 @@ int RunSimpleTransaction() {
     to_address_input, amount_input, nonce_input, gas_price_input, gas_limit_input
   };
   
+  // Create a proper component structure with input components
+  auto transaction_form = Container::Vertical({
+    to_address_input,
+    amount_input, 
+    nonce_input,
+    gas_price_input,
+    gas_limit_input
+  });
+  
   // Event handling for comprehensive keyboard navigation
-  auto main_component = CatchEvent(Container::Vertical({}), [&](Event event) {
+  auto main_component = CatchEvent(transaction_form, [&](Event event) {
     // Handle confirmation dialog
     if (show_confirm_dialog) {
       if (event == Event::Character('y') || event == Event::Character('Y')) {
@@ -486,9 +495,12 @@ int RunSimpleTransaction() {
       }
     }
     
-    if (event == Event::Escape || event == Event::Character('b') || event == Event::Backspace) {
-      go_back();
-      return true;
+    // Handle escape/back navigation (but not when typing in input fields)
+    if (current_screen != Screen::TRANSACTION_INPUT || !form_inputs[focused_element]->Focused()) {
+      if (event == Event::Escape || event == Event::Character('b')) {
+        go_back();
+        return true;
+      }
     }
     
     // Screen navigation shortcuts (only when not actively typing in input fields)
@@ -498,6 +510,9 @@ int RunSimpleTransaction() {
       if (event == Event::Character('3')) { navigate_to_screen(Screen::TRANSACTION_INPUT); return true; }
       if (event == Event::Character('4')) { navigate_to_screen(Screen::CONFIRMATION); return true; }
       if (event == Event::Character('5')) { navigate_to_screen(Screen::RESULT); return true; }
+    } else {
+      // When in input fields, let the input components handle character events
+      return false;
     }
     
     if (current_screen == Screen::RESULT) {
@@ -529,13 +544,16 @@ int RunSimpleTransaction() {
         focused_element = (focused_element + 1) % 5;
         return true;
       }
-      if (event == Event::ArrowDown || event == Event::Character('j')) {
-        focused_element = (focused_element + 1) % 5;
-        return true;
-      }
-      if (event == Event::ArrowUp || event == Event::Character('k')) {
-        focused_element = (focused_element - 1 + 5) % 5;
-        return true;
+      // Only handle arrow keys and j/k when not actively typing in input fields
+      if (!form_inputs[focused_element]->Focused()) {
+        if (event == Event::ArrowDown || event == Event::Character('j')) {
+          focused_element = (focused_element + 1) % 5;
+          return true;
+        }
+        if (event == Event::ArrowUp || event == Event::Character('k')) {
+          focused_element = (focused_element - 1 + 5) % 5;
+          return true;
+        }
       }
     }
     
@@ -694,26 +712,12 @@ int RunSimpleTransaction() {
           "toAddress", "amount", "nonce", "gasPrice", "gasLimit"
         };
         
-        Elements form_elements;
-        for (size_t i = 0; i < field_labels.size(); i++) {
-          bool is_focused = focused_element == (int)i;
-          
-          auto field_element = hbox({
-            text(is_focused ? "► " : "  "),
-            text("[" + std::to_string(i+1) + "] " + field_labels[i]) | size(WIDTH, EQUAL, 20) | 
-              (is_focused ? color(Color::GreenLight) | bold : color(Color::Green)),
-            form_inputs[i]->Render() | (is_focused ? bgcolor(Color::Green) | color(Color::Black) : color(Color::GreenLight))
-          });
-          
-          form_elements.push_back(field_element);
-          if (i < field_labels.size() - 1) {
-            form_elements.push_back(text(""));
-          }
-        }
+        // Use the proper component structure for input handling
+        auto form_component = transaction_form->Render();
         
         // Add autocomplete dropdown
+        Elements autocomplete_elements;
         if (show_autocomplete && focused_element == 0 && !autocomplete_results.empty()) {
-          Elements autocomplete_elements;
           autocomplete_elements.push_back(text("Suggestions (" + std::to_string(autocomplete_results.size()) + " matches):") | 
                                         color(Color::Yellow) | bold);
           
@@ -738,17 +742,18 @@ int RunSimpleTransaction() {
             autocomplete_elements.push_back(suggestion_element);
           }
           
-          form_elements.push_back(text(""));
-          form_elements.push_back(vbox(autocomplete_elements) | border | color(Color::Yellow));
-          form_elements.push_back(text("Use j/k or ↓↑ to navigate • Tab to select • Esc to close") | center | dim | color(Color::Yellow));
+          autocomplete_elements.push_back(text(""));
+          autocomplete_elements.push_back(text("Use j/k or ↓↑ to navigate • Tab to select • Esc to close") | center | dim | color(Color::Yellow));
         }
         
         content = vbox({
           text("[FORM] Transaction Details") | bold | center | color(Color::Green),
           separator(),
           text(""),
-          vbox(form_elements),
+          form_component,
           text(""),
+          // Add autocomplete dropdown if it exists
+          autocomplete_elements.empty() ? text("") : vbox(autocomplete_elements) | border | color(Color::Yellow),
           hbox({
             text("[Esc/b/⌫] Back") | color(Color::Yellow),
             text("  "),
