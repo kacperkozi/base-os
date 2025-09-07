@@ -603,16 +603,12 @@ int RunSimpleTransaction() {
           text("") | center,
           text("Please connect your hardware wallet and ensure it's unlocked.") | center | color(Color::GreenLight),
           text("") | center,
-          vbox({
-            text("┌─────────── Hardware Wallet Status ───────────┐") | center,
-            text("│ " + status_icon + " Status: " + status_text + std::string(25 - status_text.length(), ' ') + "│") | center | color(status_color),
-            text("│ Device: " + wallet_device_info + std::string(35 - std::min(35, (int)wallet_device_info.length()), ' ') + "│") | center | color(Color::GreenLight),
-            text("└─────────────────────────────────────────────┘") | center
-            text("┌─  Hardware Wallet Status ─┐") | center,
-            text("│ Status: Detecting...      │") | center,
-            text("│ Device: Not Connected     │") | center,
-            text("└───────────────────────────┘") | center
-          }) | border | center,
+           vbox({
+             text("┌─────────── Hardware Wallet Status ───────────┐") | center,
+             text("│ " + status_icon + " Status: " + status_text + std::string(25 - status_text.length(), ' ') + "│") | center | color(status_color),
+             text("│ Device: " + wallet_device_info + std::string(35 - std::min(35, (int)wallet_device_info.length()), ' ') + "│") | center | color(Color::GreenLight),
+             text("└─────────────────────────────────────────────┘") | center
+           }) | border | center,
           text("") | center,
           text("Device detection runs every 1 second") | center | dim | color(Color::Blue),
           text("") | center,
