@@ -3,6 +3,10 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
 #include <ftxui/component/event.hpp>
+#include <ftxui/dom/node.hpp>
+#include <ftxui/screen/screen.hpp>
+#include <ftxui/screen/box.hpp>
+#include <ftxui/screen/pixel.hpp>
 #include "app/wallet_detector.hpp"
 #include <string>
 #include <thread>
@@ -11,6 +15,7 @@
 #include <algorithm>
 #include <map>
 #include <sstream>
+#include <cmath>
 #include "app/qr_generator.hpp"
 #include <iostream>
 #include <cstdio>
@@ -34,6 +39,76 @@ std::string execCommand(const std::string& cmd) {
         result += buffer.data();
     }
     return result;
+}
+
+class QrCodeNode : public ftxui::Node {
+public:
+    QrCodeNode(app::QRCode qr) : qr_data_(std::move(qr)) {}
+
+    void ComputeRequirement() override {
+        requirement_.min_x = 2;
+        requirement_.min_y = 1;
+        requirement_.flex_grow_x = 0;
+        requirement_.flex_grow_y = 0;
+        requirement_.flex_shrink_x = 1;
+        requirement_.flex_shrink_y = 1;
+    }
+
+    void Render(ftxui::Screen& screen) override {
+        Node::Render(screen);
+        int width = box_.x_max - box_.x_min + 1;
+        int height = box_.y_max - box_.y_min + 1;
+
+        if (width <= 0 || height <= 0 || qr_data_.size == 0) {
+            return;
+        }
+
+        // Following the official Nayuki demo approach but with smaller border
+        int border = 2;
+        int total_size = qr_data_.size + 2 * border;
+        
+        // Calculate scale to fit in available space, but cap it to keep size very small
+        int scale = std::min(width / (total_size * 2), height / total_size);
+        if (scale < 1) scale = 1;
+        if (scale > 1) scale = 1; // Force scale to 1 to keep QR code as small as possible
+        
+        int render_width = total_size * scale * 2;
+        int render_height = total_size * scale;
+        
+        int offset_x = (width - render_width) / 2;
+        int offset_y = (height - render_height) / 2;
+
+        for (int y = 0; y < render_height; ++y) {
+            for (int x = 0; x < render_width; ++x) {
+                // Map screen coordinates back to QR coordinates
+                int qr_x = (x / (scale * 2)) - border;
+                int qr_y = (y / scale) - border;
+                
+                bool is_black = false;
+                if (qr_x >= 0 && qr_x < qr_data_.size && qr_y >= 0 && qr_y < qr_data_.size) {
+                    is_black = qr_data_.modules[qr_y][qr_x];
+                }
+
+                ftxui::Pixel& p = screen.PixelAt(box_.x_min + offset_x + x, box_.y_min + offset_y + y);
+                if (is_black) {
+                    p.character = "█";
+                    p.foreground_color = ftxui::Color::Black;
+                    p.background_color = ftxui::Color::Black;
+                } else {
+                    p.character = " ";
+                    p.foreground_color = ftxui::Color::White;
+                    p.background_color = ftxui::Color::White;
+                }
+            }
+        }
+    }
+
+private:
+    app::QRCode qr_data_;
+};
+
+ftxui::Element ResponsiveQrCode(app::QRCode qr) {
+    return std::make_shared<QrCodeNode>(std::move(qr));
 }
 
 // Contact data structure
@@ -61,6 +136,9 @@ int RunSimpleTransaction() {
   enum class Screen { CONNECT_WALLET, USB_CONTACTS, TRANSACTION_INPUT, CONFIRMATION, RESULT };
   Screen current_screen = Screen::CONNECT_WALLET;
   std::vector<Screen> navigation_history = {Screen::CONNECT_WALLET};
+  
+  enum class ResultView { QR_CODE, TX_DATA };
+  ResultView current_result_view = ResultView::QR_CODE;
   
   // UI state
   int focused_element = 0;
@@ -414,12 +492,25 @@ int RunSimpleTransaction() {
       return true;
     }
     
-    // Screen navigation shortcuts
-    if (event == Event::Character('1')) { navigate_to_screen(Screen::CONNECT_WALLET); return true; }
-    if (event == Event::Character('2')) { navigate_to_screen(Screen::USB_CONTACTS); return true; }
-    if (event == Event::Character('3')) { navigate_to_screen(Screen::TRANSACTION_INPUT); return true; }
-    if (event == Event::Character('4')) { navigate_to_screen(Screen::CONFIRMATION); return true; }
-    if (event == Event::Character('5')) { navigate_to_screen(Screen::RESULT); return true; }
+    // Screen navigation shortcuts (only when not actively typing in input fields)
+    if (current_screen != Screen::TRANSACTION_INPUT || !form_inputs[focused_element]->Focused()) {
+      if (event == Event::Character('1')) { navigate_to_screen(Screen::CONNECT_WALLET); return true; }
+      if (event == Event::Character('2')) { navigate_to_screen(Screen::USB_CONTACTS); return true; }
+      if (event == Event::Character('3')) { navigate_to_screen(Screen::TRANSACTION_INPUT); return true; }
+      if (event == Event::Character('4')) { navigate_to_screen(Screen::CONFIRMATION); return true; }
+      if (event == Event::Character('5')) { navigate_to_screen(Screen::RESULT); return true; }
+    }
+    
+    if (current_screen == Screen::RESULT) {
+      if (event == Event::ArrowLeft || event == Event::Character('h')) {
+        current_result_view = ResultView::QR_CODE;
+        return true;
+      }
+      if (event == Event::ArrowRight || event == Event::Character('l')) {
+        current_result_view = ResultView::TX_DATA;
+        return true;
+      }
+    }
     
     // USB contacts navigation
     if (current_screen == Screen::USB_CONTACTS && !contacts.empty()) {
@@ -760,54 +851,37 @@ int RunSimpleTransaction() {
         
         // Generate high-quality QR code from the transaction payload
         app::QRCode qr = app::GenerateQR(qr_payload_data);
-
-        // Render the QR code using a robust, font-independent ASCII method.
-        // This uses "##" for black modules and "  " for white modules to create
-        // a scannable QR code with a good aspect ratio in most terminals.
-        std::string qr_ascii = qr.toRobustAscii();
         
-        // Convert QR code ASCII art to FTXUI display elements
-        Elements qr_lines;
-        std::istringstream qr_stream(qr_ascii);
-        std::string line;
-        while (std::getline(qr_stream, line)) {
-          if (!line.empty()) {
-            // Render black modules ("##") on a white background for scannability
-            qr_lines.push_back(text(line) | color(Color::Black) | bgcolor(Color::White));
+        Element view_element;
+        if (current_result_view == ResultView::QR_CODE) {
+          view_element = ResponsiveQrCode(qr) | flex;
+        } else {
+          // Display the actual script output
+          std::string display_output = tx_hash;
+          if (display_output.length() > 200) {
+            display_output = display_output.substr(0, 197) + "...";
           }
+          
+          view_element = vbox({
+            text("📋 SIGNED TRANSACTION DATA") | bold | center,
+            text(""),
+            text("Script Output:"),
+            text(display_output) | color(Color::Cyan),
+            text(""),
+            text("Payload Size: " + std::to_string(qr_payload_data.length()) + " characters"),
+            text("QR Code: " + std::to_string(qr.size) + "x" + std::to_string(qr.size) + " modules"),
+          }) | center;
         }
-        
-        // Mock signed transaction hex (for display purposes)
-        std::string mock_signed_tx = "0xf86c0a8504a817c8008252089435353535353535353535353535353535880de0b6b3a76400008025a04f4c17305743700648bc4f6cd3038ec6f6af0df73e31757d8b9f8dc5c4c0c93739a06b6b6974e48386f05e5fcb2a13b61b5b4680a2b17b87b7101";
-        
+
+        auto qr_tab = text(" [1] QR Code ") | (current_result_view == ResultView::QR_CODE ? bgcolor(Color::Green) | color(Color::Black) : color(Color::GrayDark));
+        auto data_tab = text(" [2] Raw Data ") | (current_result_view == ResultView::TX_DATA ? bgcolor(Color::Green) | color(Color::Black) : color(Color::GrayDark));
+
         content = vbox({
           text("🎉 TRANSACTION SIGNED SUCCESSFULLY 🎉") | bold | center | color(Color::Green),
           separator(),
-          text(""),
-          
-          // QR Code Section
-          text("QR CODE FOR BROADCASTING") | center | bold | color(Color::Cyan),
-          text(""),
-          vbox(qr_lines) | center | border,
-          text(""),
-          text("Scan with mobile device to broadcast transaction") | center | color(Color::GreenLight),
-          text(""),
-          
-          separator(),
-          text(""),
-          
-          // Transaction Details Section  
-          text("📋 SIGNED TRANSACTION DATA") | center | bold | color(Color::Yellow),
-          text("Raw Hex (for manual broadcasting):") | center | dim,
-          text(mock_signed_tx.substr(0, 80) + "...") | center | color(Color::Cyan) | dim,
-          text(""),
-          text("Payload Size: " + std::to_string(qr_payload_data.length()) + " characters") | center | dim,
-          text("QR Code: " + std::to_string(qr.size) + "x" + std::to_string(qr.size) + " modules (ASCII)") | center | dim,
-          text(""),
-          
-          separator(),
-          text(""),
-          text("🔄 [Enter] Sign Another Transaction  |  [q] Quit") | center | color(Color::Yellow)
+          hbox({qr_tab, data_tab}) | center,
+          view_element | flex | border,
+          text("←/→ to switch view  |  [Enter] Sign Another  |  [q] Quit") | center | color(Color::Yellow)
         });
 
         // Check if we have actual script output or an error
@@ -825,38 +899,6 @@ int RunSimpleTransaction() {
             text("Please check the console output for more details.") | center | color(Color::Yellow),
             text(""),
             text("[Enter/q/r] Try Again") | center | color(Color::Yellow)
-          });
-        } else {
-          // Mock QR code representation (will be replaced with actual QR code later)
-          Elements qr_lines;
-          for (int i = 0; i < 8; i++) {
-            std::string qr_line = "";
-            for (int j = 0; j < 16; j++) {
-              qr_line += ((i + j) % 3 == 0) ? "██" : "  ";
-            }
-            qr_lines.push_back(text(qr_line) | bgcolor(Color::Green) | color(Color::Black));
-          }
-          
-          // Display the actual script output
-          std::string display_output = tx_hash;
-          if (display_output.length() > 80) {
-            display_output = display_output.substr(0, 77) + "...";
-          }
-          
-          content = vbox({
-            text("[SUCCESS] Transaction Signed Successfully") | bold | center | color(Color::Green),
-            separator(),
-            text(""),
-            text("QR Code (Mock - will show actual QR later)") | center | bold,
-            vbox(qr_lines) | center | border,
-            text(""),
-            text("Script Output:") | center | bold,
-            text(display_output) | center | color(Color::Cyan) | dim,
-            text(""),
-            text("The TypeScript script has been executed successfully.") | center | color(Color::GreenLight),
-            text("QR code generation will be implemented next.") | center | color(Color::GreenLight),
-            text(""),
-            text("[Enter/q/r] Sign Another Transaction") | center | color(Color::Yellow)
           });
         }
 
