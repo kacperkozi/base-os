@@ -329,26 +329,18 @@ if(NOT FTXUI_FOUND)
     "  4. Enable USE_FETCHCONTENT_FTXUI (not for production)")
 endif()
 
-# ZXing-CPP support (optional)
-option(USE_SYSTEM_ZXING "Use system ZXing-CPP if available" OFF)
-if(USE_SYSTEM_ZXING)
-  find_package(ZXing QUIET)
-  if(ZXing_FOUND)
-    message(STATUS "Using system ZXing-CPP")
-    set(ZXING_LIBS ZXing::ZXing)
-  else()
-    message(STATUS "ZXing-CPP not found, using fallback QR implementation")
-    add_compile_definitions(NO_ZXING)
-  endif()
-else()
-  add_compile_definitions(NO_ZXING)
-endif()
+# QR Code generation using Nayuki library (included in source)
+# The Nayuki QR Code generator is MIT licensed and included directly
+# No external dependencies required - qrcodegen.cpp is compiled with the project
 
 # Main executable
 add_executable(base_os_tui
   src/main.cpp
   src/hello_world.cpp
   src/simple_transaction.cpp
+  src/qr_generator.cpp
+  src/qrcodegen.cpp
+
   src/main_with_wallet_detection.cpp
   src/wallet_detector.cpp
   src/logger.cpp
@@ -361,6 +353,7 @@ add_executable(base_os_tui
   # src/views_new.cpp
   # src/views_thread_safe.cpp
   # src/qr_generator.cpp
+
 )
 
 # Include directories
@@ -375,7 +368,6 @@ target_link_libraries(base_os_tui
     ftxui::component 
     ftxui::dom 
     ftxui::screen
-    ${ZXING_LIBS}
 )
 
 # Platform-specific settings
@@ -481,7 +473,7 @@ elseif(USE_VENDORED_FTXUI)
 elseif(USE_FETCHCONTENT_FTXUI)
   message(STATUS "  FetchContent (GitHub)")
 endif()
-message(STATUS "System ZXing: ${USE_SYSTEM_ZXING}")
+message(STATUS "QR Code Library: Nayuki (MIT licensed, included)")
 message(STATUS "Ubuntu Compatible: YES")
 message(STATUS "==================================")
 message(STATUS "")

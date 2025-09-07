@@ -8,11 +8,11 @@ struct QRCode {
   std::vector<std::vector<bool>> modules;
   int size = 0;
   
-  // Generate ASCII art representation
-  std::string toASCII(bool invert = false) const;
-  
-  // Generate compact representation using block characters
-  std::string toBlocks() const;
+  // Renders a font-independent, scannable QR code using ASCII characters.
+  // Each module is rendered as a 2x1 character block ("##" or "  ") to
+  // approximate a square aspect ratio in standard terminals.
+  // Includes a spec-compliant 4-module quiet zone.
+  std::string toRobustAscii() const;
 };
 
 // Generate QR code from data
