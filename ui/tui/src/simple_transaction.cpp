@@ -839,9 +839,10 @@ int RunSimpleTransaction() {
         // QR CODE DATA PLACEHOLDER - Replace this section with dynamic transaction data
         // ============================================================================
         
-        // TODO: Replace this hardcoded payload with actual signed transaction data
-        // This should come from the transaction signing process above
-        std::string qr_payload_data = R"({"type":"1","version":"1.0","data":{"hash":"0x1db03e193bc95ca525006ed6ccd619b3b9db060a959d5e5c987c807c992732d1","signature":{"r":"0xf827b2181487b88bcef666d5729a8b9fcb7ac7cfd94dd4c4e9e9dbcfc9be154d","s":"0x5981479fb853e3779b176e12cd6feb4424159679c6bf8f4f468f92f700d9722d","v":"0x422d"},"transaction":{"to":"0x8c47B9fADF822681C68f34fd9b0D3063569245A1","value":"0x01e078","nonce":23,"gasPrice":"0x019bfcc0","gasLimit":"0x5208","data":"0x","chainId":8453},"timestamp":1757205711661,"network":"base"},"checksum":"dee6a6184b7c1479"})";
+        // Use actual script output as QR payload data, fallback to mock data if empty
+        std::string qr_payload_data = tx_hash.empty() ? 
+          R"({"type":"1","version":"1.0","data":{"hash":"0x1db03e193bc95ca525006ed6ccd619b3b9db060a959d5e5c987c807c992732d1","signature":{"r":"0xf827b2181487b88bcef666d5729a8b9fcb7ac7cfd94dd4c4e9e9dbcfc9be154d","s":"0x5981479fb853e3779b176e12cd6feb4424159679c6bf8f4f468f92f700d9722d","v":"0x422d"},"transaction":{"to":"0x8c47B9fADF822681C68f34fd9b0D3063569245A1","value":"0x01e078","nonce":23,"gasPrice":"0x019bfcc0","gasLimit":"0x5208","data":"0x","chainId":8453},"timestamp":1757205711661,"network":"base"},"checksum":"dee6a6184b7c1479"})" : 
+          tx_hash;
         
         // ============================================================================
         // QR CODE GENERATION - Using Nayuki QR Code Generator (MIT Licensed)
@@ -850,18 +851,21 @@ int RunSimpleTransaction() {
         // Generate high-quality QR code from the transaction payload
         app::QRCode qr = app::GenerateQR(qr_payload_data);
         
-        // Mock signed transaction hex (for display purposes)
-        std::string mock_signed_tx = "0xf86c0a8504a817c8008252089435353535353535353535353535353535880de0b6b3a76400008025a04f4c17305743700648bc4f6cd3038ec6f6af0df73e31757d8b9f8dc5c4c0c93739a06b6b6974e48386f05e5fcb2a13b61b5b4680a2b17b87b7101";
-        
         Element view_element;
         if (current_result_view == ResultView::QR_CODE) {
           view_element = ResponsiveQrCode(qr) | flex;
         } else {
+          // Display the actual script output
+          std::string display_output = tx_hash;
+          if (display_output.length() > 200) {
+            display_output = display_output.substr(0, 197) + "...";
+          }
+          
           view_element = vbox({
             text("📋 SIGNED TRANSACTION DATA") | bold | center,
             text(""),
-            text("Raw Hex (for manual broadcasting):"),
-            text(mock_signed_tx) | color(Color::Cyan),
+            text("Script Output:"),
+            text(display_output) | color(Color::Cyan),
             text(""),
             text("Payload Size: " + std::to_string(qr_payload_data.length()) + " characters"),
             text("QR Code: " + std::to_string(qr.size) + "x" + std::to_string(qr.size) + " modules"),
@@ -879,9 +883,8 @@ int RunSimpleTransaction() {
           text("←/→ to switch view  |  [Enter] Sign Another  |  [q] Quit") | center | color(Color::Yellow)
         });
 
-        // Check if we have actual script output or an error
+        // Handle error case by overriding the content if there's an error
         bool is_error = tx_hash.find("Error") != std::string::npos;
-        
         if (is_error) {
           content = vbox({
             text("[ERROR] Script Execution Failed") | bold | center | color(Color::Red),
@@ -894,38 +897,6 @@ int RunSimpleTransaction() {
             text("Please check the console output for more details.") | center | color(Color::Yellow),
             text(""),
             text("[Enter/q/r] Try Again") | center | color(Color::Yellow)
-          });
-        } else {
-          // Mock QR code representation (will be replaced with actual QR code later)
-          Elements qr_lines;
-          for (int i = 0; i < 8; i++) {
-            std::string qr_line = "";
-            for (int j = 0; j < 16; j++) {
-              qr_line += ((i + j) % 3 == 0) ? "██" : "  ";
-            }
-            qr_lines.push_back(text(qr_line) | bgcolor(Color::Green) | color(Color::Black));
-          }
-          
-          // Display the actual script output
-          std::string display_output = tx_hash;
-          if (display_output.length() > 80) {
-            display_output = display_output.substr(0, 77) + "...";
-          }
-          
-          content = vbox({
-            text("[SUCCESS] Transaction Signed Successfully") | bold | center | color(Color::Green),
-            separator(),
-            text(""),
-            text("QR Code (Mock - will show actual QR later)") | center | bold,
-            vbox(qr_lines) | center | border,
-            text(""),
-            text("Script Output:") | center | bold,
-            text(display_output) | center | color(Color::Cyan) | dim,
-            text(""),
-            text("The TypeScript script has been executed successfully.") | center | color(Color::GreenLight),
-            text("QR code generation will be implemented next.") | center | color(Color::GreenLight),
-            text(""),
-            text("[Enter/q/r] Sign Another Transaction") | center | color(Color::Yellow)
           });
         }
 
