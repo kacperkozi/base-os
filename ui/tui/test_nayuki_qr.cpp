@@ -14,8 +14,11 @@ int main() {
     std::cout << "Generated QR Code size: " << qr.size << "x" << qr.size << std::endl;
     std::cout << std::endl;
     
-    std::cout << "QR Code (ASCII representation):" << std::endl;
-    std::cout << qr.toASCII() << std::endl;
+    std::cout << "QR Code (Robust ASCII representation):" << std::endl;
+    std::cout << qr.toRobustAscii() << std::endl;
+    
+    std::cout << "QR Code (Compact ASCII representation):" << std::endl;
+    std::cout << qr.toCompactAscii() << std::endl;
     
     return 0;
 }

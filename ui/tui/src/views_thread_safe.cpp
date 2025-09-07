@@ -947,17 +947,31 @@ Component ResultView(AppState& s) {
     std::string signed_hex = s.getSignedHex();
     if (!signed_hex.empty()) {
       try {
-        auto qrCode = app::GenerateQR(signed_hex);
-        std::string qrAscii = qrCode.toASCII();
-        
-        std::istringstream stream(qrAscii);
-        std::string line;
-        Elements qrLines;
-        while (std::getline(stream, line)) {
-          qrLines.push_back(text(line) | center);
+        // Use chunked QR generation for consistency
+        auto qrCodes = app::GenerateQRs(signed_hex, 100);
+        if (!qrCodes.empty()) {
+          // For thread-safe view, just show the first part for simplicity
+          auto& qrCode = qrCodes[0];
+          std::string qrAscii = qrCode.toCompactAscii();
+          
+          std::istringstream stream(qrAscii);
+          std::string line;
+          Elements qrLines;
+          while (std::getline(stream, line)) {
+            qrLines.push_back(text(line) | center);
+          }
+          
+          // Add part indicator if multi-part
+          if (qrCode.total_parts > 1) {
+            qrLines.insert(qrLines.begin(), 
+              text("Part 1 of " + std::to_string(qrCode.total_parts) + " (use views_new.cpp for full navigation)") | 
+              center | color(Color::Yellow));
+          }
+          
+          content.push_back(vbox(std::move(qrLines)) | border);
+        } else {
+          content.push_back(text("QR generation failed") | center | color(Color::Red));
         }
-        
-        content.push_back(vbox(std::move(qrLines)) | border);
       } catch (const std::exception& e) {
         content.push_back(text("QR Code generation failed: " + std::string(e.what())) | center | color(Color::Red));
       }

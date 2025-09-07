@@ -904,12 +904,28 @@ int RunSimpleTransaction() {
         // QR CODE GENERATION - Using Nayuki QR Code Generator (MIT Licensed)
         // ============================================================================
         
-        // Generate high-quality QR code from the transaction payload
-        app::QRCode qr = app::GenerateQR(qr_payload_data);
+        // Generate high-quality QR codes from the transaction payload (with chunking support)
+        auto qr_codes = app::GenerateQRs(qr_payload_data, 100);
         
         Element view_element;
-        if (current_result_view == ResultView::QR_CODE) {
-          view_element = ResponsiveQrCode(qr) | flex;
+        if (current_result_view == ResultView::QR_CODE && !qr_codes.empty()) {
+          // For now, show first QR code with pixel rendering
+          // TODO: Add navigation between QR parts like views_new.cpp
+          auto& qr = qr_codes[0];
+          
+          Elements qr_elements;
+          qr_elements.push_back(ResponsiveQrCode(qr) | flex);
+          
+          // Add part indicator if multi-part
+          if (qr.total_parts > 1) {
+            qr_elements.push_back(
+              text("Part " + std::to_string(qr.part) + " of " + std::to_string(qr.total_parts) + 
+                   " (use 'h'/'l' to navigate - TODO: implement navigation)") | 
+              center | color(Color::Yellow)
+            );
+          }
+          
+          view_element = vbox(qr_elements) | flex;
         } else {
           // Display the actual script output
           std::string display_output = tx_hash;
@@ -924,7 +940,8 @@ int RunSimpleTransaction() {
             text(display_output) | color(Color::Cyan),
             text(""),
             text("Payload Size: " + std::to_string(qr_payload_data.length()) + " characters"),
-            text("QR Code: " + std::to_string(qr.size) + "x" + std::to_string(qr.size) + " modules"),
+            text("QR Codes: " + std::to_string(qr_codes.size()) + " parts, " + 
+                 (qr_codes.empty() ? "0x0" : std::to_string(qr_codes[0].size) + "x" + std::to_string(qr_codes[0].size)) + " modules each"),
           }) | center;
         }
 
