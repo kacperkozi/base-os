@@ -268,8 +268,11 @@ int RunSimpleTransaction() {
     to_address_input, amount_input, nonce_input, gas_price_input, gas_limit_input
   };
   
+  // Create a container with the actual input components
+  auto input_container = Container::Vertical(form_inputs);
+  
   // Event handling for comprehensive keyboard navigation
-  auto main_component = CatchEvent(Container::Vertical({}), [&](Event event) {
+  auto main_component = CatchEvent(input_container, [&](Event event) {
     // Handle confirmation dialog
     if (show_confirm_dialog) {
       if (event == Event::Character('y') || event == Event::Character('Y')) {
@@ -334,11 +337,11 @@ int RunSimpleTransaction() {
     
     // Handle autocomplete navigation
     if (show_autocomplete && current_screen == Screen::TRANSACTION_INPUT && focused_element == 0) {
-      if (event == Event::ArrowDown || event == Event::Character('j')) {
+      if (event == Event::ArrowDown) {
         autocomplete_index = (autocomplete_index + 1) % autocomplete_results.size();
         return true;
       }
-      if (event == Event::ArrowUp || event == Event::Character('k')) {
+      if (event == Event::ArrowUp) {
         autocomplete_index = (autocomplete_index - 1 + autocomplete_results.size()) % autocomplete_results.size();
         return true;
       }
@@ -352,6 +355,10 @@ int RunSimpleTransaction() {
       if (event == Event::Escape) {
         show_autocomplete = false;
         return true;
+      }
+      // Don't block character input - let it pass through to the input field
+      if (event.is_character()) {
+        return false;
       }
     }
     
@@ -435,17 +442,30 @@ int RunSimpleTransaction() {
     
     // Transaction input form navigation
     if (current_screen == Screen::TRANSACTION_INPUT) {
-      if (event == Event::Tab) {
+      // Let the container handle Tab navigation naturally
+      if (event == Event::Tab || event == Event::TabReverse) {
+        return false; // Let the container handle tab navigation
+      }
+      // Custom navigation with j/k keys
+      if (event == Event::Character('j')) {
         focused_element = (focused_element + 1) % 5;
+        // Send a Tab event to move focus to next input
+        input_container->OnEvent(Event::Tab);
         return true;
       }
-      if (event == Event::ArrowDown || event == Event::Character('j')) {
-        focused_element = (focused_element + 1) % 5;
-        return true;
-      }
-      if (event == Event::ArrowUp || event == Event::Character('k')) {
+      if (event == Event::Character('k')) {
         focused_element = (focused_element - 1 + 5) % 5;
+        // Send a TabReverse event to move focus to previous input
+        input_container->OnEvent(Event::TabReverse);
         return true;
+      }
+      // Let arrow keys and typing be handled by the input container
+      if (event == Event::ArrowDown || event == Event::ArrowUp) {
+        return false; // Let the container handle arrow navigation
+      }
+      // Allow character input to pass through to the focused input
+      if (event.is_character()) {
+        return false; // Let the input handle the character
       }
     }
     
