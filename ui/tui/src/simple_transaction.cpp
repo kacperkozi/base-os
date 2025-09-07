@@ -3,6 +3,7 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
 #include <ftxui/component/event.hpp>
+#include "app/wallet_detector.hpp"
 #include <string>
 #include <thread>
 #include <chrono>
@@ -11,8 +12,29 @@
 #include <map>
 #include <sstream>
 #include "app/qr_generator.hpp"
+#include <iostream>
+#include <cstdio>
+#include <memory>
+#include <stdexcept>
+#include <array>
 
 using namespace ftxui;
+using app::WalletDetector;
+using app::DetectionStatus;
+
+// Function to execute shell command and capture output
+std::string execCommand(const std::string& cmd) {
+    std::array<char, 128> buffer;
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
+    }
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+        result += buffer.data();
+    }
+    return result;
+}
 
 // Contact data structure
 struct Contact {
@@ -83,6 +105,49 @@ int RunSimpleTransaction() {
   std::string tx_hash = "";
   std::string status_message = "Welcome to Offline Signer";
   
+  // Wallet detection state
+  std::unique_ptr<WalletDetector> wallet_detector = std::make_unique<WalletDetector>();
+  DetectionStatus wallet_status = DetectionStatus::DISCONNECTED;
+  std::string wallet_device_info = "No device detected";
+  bool wallet_detection_started = false;
+  
+  // Wallet detection setup
+  auto setup_wallet_detection = [&]() {
+    if (!wallet_detection_started) {
+      wallet_detector->setStatusChangeCallback([&](DetectionStatus status) {
+        wallet_status = status;
+        // Only update device info if we don't have specific device information
+        if (wallet_device_info.find("Ledger device detected:") == std::string::npos) {
+          switch (status) {
+            case DetectionStatus::CONNECTED:
+              wallet_device_info = "Ledger device detected and accessible";
+              break;
+            case DetectionStatus::CONNECTING:
+              wallet_device_info = "Scanning for USB devices (every 1 second)...";
+              break;
+            case DetectionStatus::DISCONNECTED:
+              wallet_device_info = "No Ledger device detected";
+              break;
+            case DetectionStatus::ERROR:
+              wallet_device_info = "Device detection error";
+              break;
+          }
+        }
+      });
+      
+      wallet_detector->setDeviceFoundCallback([&](const app::WalletDevice& device) {
+        if (device.connected) {
+          wallet_device_info = "Ledger device detected: " + device.product + " (" + device.path + ")";
+        } else {
+          wallet_device_info = "Device found but not accessible: " + device.product;
+        }
+      });
+      
+      wallet_detector->startDetection();
+      wallet_detection_started = true;
+    }
+  };
+  
   // Mock contacts data
   auto load_mock_contacts = [&]() {
     contacts = {
@@ -149,12 +214,44 @@ int RunSimpleTransaction() {
     }).detach();
   };
   
-  // Transaction signing simulation
-  auto simulate_signing = [&]() {
+  // Execute TypeScript signing script
+  auto execute_signing_script = [&]() {
     is_signing = true;
     std::thread([&]() {
-      std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-      tx_hash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      try {
+        // Build the command to execute the TypeScript script
+        std::string script_path = "/Users/kiki/Documents/ETHWARSAW_2025/base-os/signing-app";
+        std::string command = "cd " + script_path + " && npx ts-node eth-signer-cli.ts";
+        
+        // Add parameters from form data
+        if (!form_data["toAddress"].empty()) {
+          command += " --to " + form_data["toAddress"];
+        }
+        if (!form_data["amount"].empty()) {
+          command += " --amount " + form_data["amount"];
+        }
+        if (!form_data["nonce"].empty()) {
+          command += " --nonce " + form_data["nonce"];
+        }
+        // Add default chainId for Base (8453)
+        command += " --chainId 8453";
+        command += " --quiet";
+        
+        std::cout << "Executing command: " << command << std::endl;
+        
+        // Execute the command and capture output
+        std::string output = execCommand(command);
+        
+        // Store the output as the transaction result
+        tx_hash = output;
+        
+        std::cout << "Script output: " << output << std::endl;
+        
+      } catch (const std::exception& e) {
+        tx_hash = "Error executing signing script: " + std::string(e.what());
+        std::cout << "Error: " << e.what() << std::endl;
+      }
+      
       is_signing = false;
       navigate_to_screen(Screen::RESULT);
     }).detach();
@@ -295,7 +392,7 @@ int RunSimpleTransaction() {
           return true;
         case Screen::CONFIRMATION:
           if (!is_signing) {
-            simulate_signing();
+            execute_signing_script();
           }
           return true;
         case Screen::RESULT:
@@ -378,7 +475,38 @@ int RunSimpleTransaction() {
     Element content;
     
     switch (current_screen) {
-      case Screen::CONNECT_WALLET:
+      case Screen::CONNECT_WALLET: {
+        // Initialize wallet detection when on this screen
+        setup_wallet_detection();
+        
+        // Determine status color and icon
+        Color status_color = Color::Red;
+        std::string status_icon = "❌";
+        std::string status_text = "Not Connected";
+        
+        switch (wallet_status) {
+          case DetectionStatus::CONNECTED:
+            status_color = Color::Green;
+            status_icon = "✅";
+            status_text = "Connected";
+            break;
+          case DetectionStatus::CONNECTING:
+            status_color = Color::Yellow;
+            status_icon = "🔄";
+            status_text = "Scanning...";
+            break;
+          case DetectionStatus::DISCONNECTED:
+            status_color = Color::Red;
+            status_icon = "❌";
+            status_text = "Not Connected";
+            break;
+          case DetectionStatus::ERROR:
+            status_color = Color::Red;
+            status_icon = "⚠️";
+            status_text = "Error";
+            break;
+        }
+        
         content = vbox({
           text("") | center,
           text("[WALLET]") | center | size(HEIGHT, EQUAL, 3),
@@ -387,15 +515,18 @@ int RunSimpleTransaction() {
           text("Please connect your hardware wallet and ensure it's unlocked.") | center | color(Color::GreenLight),
           text("") | center,
           vbox({
-            text("┌─ Hardware Wallet Status ─┐") | center,
-            text("│ Status: Detecting...      │") | center,
-            text("│ Device: Not Connected     │") | center,
-            text("└───────────────────────────┘") | center
+            text("┌─────────── Hardware Wallet Status ───────────┐") | center,
+            text("│ " + status_icon + " Status: " + status_text + std::string(25 - status_text.length(), ' ') + "│") | center | color(status_color),
+            text("│ Device: " + wallet_device_info + std::string(35 - std::min(35, (int)wallet_device_info.length()), ' ') + "│") | center | color(Color::GreenLight),
+            text("└─────────────────────────────────────────────┘") | center
           }) | border | center,
+          text("") | center,
+          text("Device detection runs every 1 second") | center | dim | color(Color::Blue),
           text("") | center,
           text("[Enter/l/→] Continue") | center | color(Color::Yellow)
         });
         break;
+      }
         
       case Screen::USB_CONTACTS:
         if (is_scanning) {
@@ -544,14 +675,16 @@ int RunSimpleTransaction() {
           content = vbox({
             text("") | center,
             text("[SIGN]") | center | size(HEIGHT, EQUAL, 3),
-            text("Signing Transaction...") | bold | center | color(Color::Magenta),
+            text("Executing Signing Script...") | bold | center | color(Color::Magenta),
             text("") | center,
-            text("[WAIT] Processing your transaction...") | center | color(Color::Yellow),
-            text("[SECURE] Secure signing in progress") | center | color(Color::Green),
+            text("[WAIT] Running TypeScript signing script...") | center | color(Color::Yellow),
+            text("[SECURE] Connecting to Ledger device") | center | color(Color::Green),
             text("") | center,
             text("Please wait, do not close the application") | center | dim,
             text("") | center,
-            text("Awaiting confirmation on device...") | center | dim
+            text("Executing: npx ts-node eth-signer-cli.ts") | center | dim,
+            text("") | center,
+            text("Awaiting device confirmation...") | center | dim
           });
         } else {
           // Calculate total cost
@@ -612,6 +745,7 @@ int RunSimpleTransaction() {
         break;
         
       case Screen::RESULT: {
+
         // ============================================================================
         // QR CODE DATA PLACEHOLDER - Replace this section with dynamic transaction data
         // ============================================================================
@@ -675,6 +809,57 @@ int RunSimpleTransaction() {
           text(""),
           text("🔄 [Enter] Sign Another Transaction  |  [q] Quit") | center | color(Color::Yellow)
         });
+
+        // Check if we have actual script output or an error
+        bool is_error = tx_hash.find("Error") != std::string::npos;
+        
+        if (is_error) {
+          content = vbox({
+            text("[ERROR] Script Execution Failed") | bold | center | color(Color::Red),
+            separator(),
+            text(""),
+            text("Error Details:") | center | bold | color(Color::Red),
+            text(""),
+            text(tx_hash) | center | color(Color::Red) | bgcolor(Color::Black),
+            text(""),
+            text("Please check the console output for more details.") | center | color(Color::Yellow),
+            text(""),
+            text("[Enter/q/r] Try Again") | center | color(Color::Yellow)
+          });
+        } else {
+          // Mock QR code representation (will be replaced with actual QR code later)
+          Elements qr_lines;
+          for (int i = 0; i < 8; i++) {
+            std::string qr_line = "";
+            for (int j = 0; j < 16; j++) {
+              qr_line += ((i + j) % 3 == 0) ? "██" : "  ";
+            }
+            qr_lines.push_back(text(qr_line) | bgcolor(Color::Green) | color(Color::Black));
+          }
+          
+          // Display the actual script output
+          std::string display_output = tx_hash;
+          if (display_output.length() > 80) {
+            display_output = display_output.substr(0, 77) + "...";
+          }
+          
+          content = vbox({
+            text("[SUCCESS] Transaction Signed Successfully") | bold | center | color(Color::Green),
+            separator(),
+            text(""),
+            text("QR Code (Mock - will show actual QR later)") | center | bold,
+            vbox(qr_lines) | center | border,
+            text(""),
+            text("Script Output:") | center | bold,
+            text(display_output) | center | color(Color::Cyan) | dim,
+            text(""),
+            text("The TypeScript script has been executed successfully.") | center | color(Color::GreenLight),
+            text("QR code generation will be implemented next.") | center | color(Color::GreenLight),
+            text(""),
+            text("[Enter/q/r] Sign Another Transaction") | center | color(Color::Yellow)
+          });
+        }
+
         break;
       }
     }

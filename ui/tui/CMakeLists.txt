@@ -340,6 +340,20 @@ add_executable(base_os_tui
   src/simple_transaction.cpp
   src/qr_generator.cpp
   src/qrcodegen.cpp
+
+  src/main_with_wallet_detection.cpp
+  src/wallet_detector.cpp
+  src/logger.cpp
+  src/state.cpp
+  src/validation.cpp
+  src/config.cpp
+  # Comment out problematic files for debugging
+  # src/views_wallet_detection.cpp
+  # src/views_minimal.cpp
+  # src/views_new.cpp
+  # src/views_thread_safe.cpp
+  # src/qr_generator.cpp
+
 )
 
 # Include directories
@@ -360,6 +374,15 @@ target_link_libraries(base_os_tui
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_libraries(base_os_tui PRIVATE pthread)
   
+  # USB device detection libraries
+  find_library(LIBUSB_LIB libusb-1.0)
+  if(LIBUSB_LIB)
+    target_link_libraries(base_os_tui PRIVATE ${LIBUSB_LIB})
+    message(STATUS "Found libusb-1.0: ${LIBUSB_LIB}")
+  else()
+    message(WARNING "libusb-1.0 not found - USB device detection may not work")
+  endif()
+  
   # Link filesystem library for C++17 compatibility on older systems
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
     target_link_libraries(base_os_tui PRIVATE stdc++fs)
@@ -370,6 +393,41 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     INSTALL_RPATH_USE_LINK_PATH TRUE
     INSTALL_RPATH "$ORIGIN/../lib"
   )
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  # macOS specific libraries
+  find_library(IOKIT_LIB IOKit)
+  find_library(COREFOUNDATION_LIB CoreFoundation)
+  
+  # Look for libusb in common Homebrew locations
+  find_library(LIBUSB_LIB 
+    NAMES libusb-1.0
+    PATHS
+      /opt/homebrew/lib
+      /usr/local/lib
+      /opt/homebrew/Cellar/libusb/*/lib
+  )
+  
+  if(IOKIT_LIB AND COREFOUNDATION_LIB)
+    target_link_libraries(base_os_tui PRIVATE ${IOKIT_LIB} ${COREFOUNDATION_LIB})
+    message(STATUS "Found macOS IOKit libraries")
+  endif()
+  
+  if(LIBUSB_LIB)
+    target_link_libraries(base_os_tui PRIVATE ${LIBUSB_LIB})
+    # Add include directories for libusb
+    target_include_directories(base_os_tui PRIVATE 
+      /opt/homebrew/include
+      /usr/local/include
+      /opt/homebrew/Cellar/libusb/*/include
+    )
+    message(STATUS "Found macOS libusb: ${LIBUSB_LIB}")
+  else()
+    message(WARNING "libusb-1.0 not found on macOS - USB device detection may not work")
+  endif()
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+  # Windows specific libraries
+  target_link_libraries(base_os_tui PRIVATE setupapi)
+  message(STATUS "Linked Windows setupapi for USB detection")
 endif()
 
 # Enable warnings
