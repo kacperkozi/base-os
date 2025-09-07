@@ -1,4 +1,40 @@
 #include <cstdlib>
-int RunApp();
-int main(){ return RunApp(); }
+#include <iostream>
+#include <string>
+
+int RunApp();                // Original implementation (views_new.cpp)
+int RunThreadSafeApp();      // Thread-safe implementation (views_thread_safe.cpp)
+int RunMinimalApp();         // Minimal MVP implementation (views_minimal.cpp)
+int RunHelloWorld();         // Ultra-minimal test (hello_world.cpp)
+int RunSimpleTransaction();  // Simple transaction app (simple_transaction.cpp)
+
+int main(int argc, char* argv[]){ 
+  // Handle command-line arguments
+  for (int i = 1; i < argc; i++) {
+    std::string arg = argv[i];
+    if (arg == "--version" || arg == "-v") {
+      std::cout << "Base OS TUI v1.0.0" << std::endl;
+      std::cout << "Simple Ethereum transaction interface" << std::endl;
+      return 0;
+    } else if (arg == "--help" || arg == "-h") {
+      std::cout << "Base OS TUI - Simple Ethereum Transaction Interface" << std::endl;
+      std::cout << std::endl;
+      std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
+      std::cout << std::endl;
+      std::cout << "Options:" << std::endl;
+      std::cout << "  --version, -v    Show version information" << std::endl;
+      std::cout << "  --help, -h       Show this help message" << std::endl;
+      std::cout << std::endl;
+      std::cout << "Controls:" << std::endl;
+      std::cout << "  Tab              Navigate between fields" << std::endl;
+      std::cout << "  Enter            Submit/Continue" << std::endl;
+      std::cout << "  Escape           Go back" << std::endl;
+      std::cout << "  Ctrl+C           Quit" << std::endl;
+      return 0;
+    }
+  }
+  
+  // Use simple transaction version - no complex state management
+  return RunSimpleTransaction(); 
+}
 
