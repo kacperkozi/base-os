@@ -139,7 +139,6 @@ int RunSimpleTransaction() {
   
   enum class ResultView { QR_CODE, TX_DATA };
   ResultView current_result_view = ResultView::QR_CODE;
-  
   // UI state
   int focused_element = 0;
   bool show_help = false;
@@ -605,12 +604,12 @@ int RunSimpleTransaction() {
           text("") | center,
           text("Please connect your hardware wallet and ensure it's unlocked.") | center | color(Color::GreenLight),
           text("") | center,
-          vbox({
-            text("┌─────────── Hardware Wallet Status ───────────┐") | center,
-            text("│ " + status_icon + " Status: " + status_text + std::string(25 - status_text.length(), ' ') + "│") | center | color(status_color),
-            text("│ Device: " + wallet_device_info + std::string(35 - std::min(35, (int)wallet_device_info.length()), ' ') + "│") | center | color(Color::GreenLight),
-            text("└─────────────────────────────────────────────┘") | center
-          }) | border | center,
+           vbox({
+             text("┌─────────── Hardware Wallet Status ───────────┐") | center,
+             text("│ " + status_icon + " Status: " + status_text + std::string(25 - status_text.length(), ' ') + "│") | center | color(status_color),
+             text("│ Device: " + wallet_device_info + std::string(35 - std::min(35, (int)wallet_device_info.length()), ' ') + "│") | center | color(Color::GreenLight),
+             text("└─────────────────────────────────────────────┘") | center
+           }) | border | center,
           text("") | center,
           text("Device detection runs every 1 second") | center | dim | color(Color::Blue),
           text("") | center,
@@ -841,9 +840,10 @@ int RunSimpleTransaction() {
         // QR CODE DATA PLACEHOLDER - Replace this section with dynamic transaction data
         // ============================================================================
         
-        // TODO: Replace this hardcoded payload with actual signed transaction data
-        // This should come from the transaction signing process above
-        std::string qr_payload_data = R"({"type":"1","version":"1.0","data":{"hash":"0x1db03e193bc95ca525006ed6ccd619b3b9db060a959d5e5c987c807c992732d1","signature":{"r":"0xf827b2181487b88bcef666d5729a8b9fcb7ac7cfd94dd4c4e9e9dbcfc9be154d","s":"0x5981479fb853e3779b176e12cd6feb4424159679c6bf8f4f468f92f700d9722d","v":"0x422d"},"transaction":{"to":"0x8c47B9fADF822681C68f34fd9b0D3063569245A1","value":"0x01e078","nonce":23,"gasPrice":"0x019bfcc0","gasLimit":"0x5208","data":"0x","chainId":8453},"timestamp":1757205711661,"network":"base"},"checksum":"dee6a6184b7c1479"})";
+        // Use actual script output as QR payload data, fallback to mock data if empty
+        std::string qr_payload_data = tx_hash.empty() ? 
+          R"({"type":"1","version":"1.0","data":{"hash":"0x1db03e193bc95ca525006ed6ccd619b3b9db060a959d5e5c987c807c992732d1","signature":{"r":"0xf827b2181487b88bcef666d5729a8b9fcb7ac7cfd94dd4c4e9e9dbcfc9be154d","s":"0x5981479fb853e3779b176e12cd6feb4424159679c6bf8f4f468f92f700d9722d","v":"0x422d"},"transaction":{"to":"0x8c47B9fADF822681C68f34fd9b0D3063569245A1","value":"0x01e078","nonce":23,"gasPrice":"0x019bfcc0","gasLimit":"0x5208","data":"0x","chainId":8453},"timestamp":1757205711661,"network":"base"},"checksum":"dee6a6184b7c1479"})" : 
+          tx_hash;
         
         // ============================================================================
         // QR CODE GENERATION - Using Nayuki QR Code Generator (MIT Licensed)
@@ -884,9 +884,8 @@ int RunSimpleTransaction() {
           text("←/→ to switch view  |  [Enter] Sign Another  |  [q] Quit") | center | color(Color::Yellow)
         });
 
-        // Check if we have actual script output or an error
+        // Handle error case by overriding the content if there's an error
         bool is_error = tx_hash.find("Error") != std::string::npos;
-        
         if (is_error) {
           content = vbox({
             text("[ERROR] Script Execution Failed") | bold | center | color(Color::Red),
@@ -912,7 +911,7 @@ int RunSimpleTransaction() {
     // Header
     ui_elements.push_back(vbox({
       text("╔══════════════════════════════════════════════════════════════╗") | center,
-      text("║                    OFFLINE SIGNER v1.0                      ║") | center | bold | color(Color::Green),
+      text("║                    OFFLINE SIGNER v1.0                       ║") | center | bold | color(Color::Green),
       text("╚══════════════════════════════════════════════════════════════╝") | center
     }));
     
@@ -949,7 +948,7 @@ int RunSimpleTransaction() {
     ui_elements.push_back(hbox(tabs) | center | border);
     
     // Main content
-    ui_elements.push_back(content | border | size(HEIGHT, GREATER_THAN, 20));
+    ui_elements.push_back(content | border | flex);
     
     // Help system
     if (show_help) {
