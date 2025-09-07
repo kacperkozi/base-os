@@ -826,6 +826,7 @@ Component SigningView(AppState& s) {
 Component ResultView(AppState& s) {
   static std::string save_path = "/home/user/signed_transaction.txt";
   static std::string save_status;
+  static int current_qr_part = 0;
   
   auto save_to_file = [&](){
     // TODO: Actually save to file
@@ -842,13 +843,26 @@ Component ResultView(AppState& s) {
   auto new_tx_btn = Button("New Transaction", [&]{
     s.clearTransaction();
     s.route = app::Route::TransactionInput;
+    current_qr_part = 0; // Reset QR part when starting new transaction
+  });
+
+  auto next_qr_btn = Button("Next QR >", [&]{
+    if (!s.qr_codes.empty() && current_qr_part < static_cast<int>(s.qr_codes.size()) - 1) {
+      current_qr_part++;
+    }
+  });
+
+  auto prev_qr_btn = Button("< Prev QR", [&]{
+    if (current_qr_part > 0) {
+      current_qr_part--;
+    }
   });
   auto exit_btn = Button("Exit", [&]{
     // TODO: Proper exit handling
     std::exit(0);
   });
   
-  auto layout = Container::Horizontal({save_btn, new_tx_btn, exit_btn});
+  auto layout = Container::Horizontal({prev_qr_btn, next_qr_btn, save_btn, new_tx_btn, exit_btn});
   
   return Renderer(layout, [&]{
     Elements content;
@@ -863,17 +877,57 @@ Component ResultView(AppState& s) {
     
     // QR Code
     if (!s.signed_hex.empty()) {
-      auto qrCode = app::GenerateQR(s.signed_hex);
-      std::string qrAscii = qrCode.toASCII();
+      // Generate QR codes with chunking (max 100 chars per chunk)
+      s.qr_codes = app::GenerateQRs(s.signed_hex, 100);
       
-      std::istringstream stream(qrAscii);
-      std::string line;
-      Elements qrLines;
-      while (std::getline(stream, line)) {
-        qrLines.push_back(text(line) | center);
+      if (!s.qr_codes.empty()) {
+        // Ensure current_qr_part is within bounds
+        if (current_qr_part >= static_cast<int>(s.qr_codes.size())) {
+          current_qr_part = 0;
+        }
+        
+        auto& qrCode = s.qr_codes[current_qr_part];
+        
+        if (qrCode.size > 0) {
+          // Determine which QR code to use based on terminal width and multi-part status
+          auto screen = ScreenInteractive::FitComponent();
+          int width = screen.dimx();
+          
+          std::string qrAscii;
+          // For multi-part QR codes, prefer compact to ensure all parts fit
+          // For single QR codes, use adaptive logic as per changes.md
+          if (qrCode.total_parts > 1 || width < qrCode.size * 2 + 8) {
+            qrAscii = qrCode.toCompactAscii();
+          } else {
+            qrAscii = qrCode.toRobustAscii();
+          }
+          
+          std::istringstream stream(qrAscii);
+          std::string line;
+          Elements qrLines;
+          while (std::getline(stream, line)) {
+            qrLines.push_back(text(line) | center);
+          }
+          
+          content.push_back(vbox(std::move(qrLines)) | border);
+
+          // Show part information and navigation if multi-part
+          if (qrCode.total_parts > 1) {
+            content.push_back(text("Part " + std::to_string(qrCode.part) + " of " + std::to_string(qrCode.total_parts)) | center | color(Color::Yellow));
+            content.push_back(hbox({
+              prev_qr_btn->Render(),
+              filler(),
+              text("Use ← → to navigate QR parts") | center | dim,
+              filler(),
+              next_qr_btn->Render()
+            }));
+          }
+        } else {
+          content.push_back(text("Failed to generate QR code for part " + std::to_string(qrCode.part)) | center | color(Color::Red));
+        }
+      } else {
+        content.push_back(text("Failed to generate QR codes") | center | color(Color::Red));
       }
-      
-      content.push_back(vbox(std::move(qrLines)) | border);
     }
     
     content.push_back(text(""));

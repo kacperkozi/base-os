@@ -4,22 +4,44 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+type PayloadMetadata = {
+  type: 'single' | 'multi';
+  totalParts?: number;
+  scanDuration?: number;
+  partsOrder?: number[];
+  completedAt?: string;
+};
+
 export default function BroadcastPage() {
   const [displayPayload, setDisplayPayload] = useState<string>("");
   const [rawTx, setRawTx] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [metadata, setMetadata] = useState<PayloadMetadata | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     try {
       const value = sessionStorage.getItem("decodedPayload") || "";
+      const metadataStr = sessionStorage.getItem("payloadMetadata") || "";
+      
+      // Load metadata if available
+      if (metadataStr) {
+        try {
+          const parsedMetadata = JSON.parse(metadataStr) as PayloadMetadata;
+          setMetadata(parsedMetadata);
+        } catch {
+          setMetadata(null);
+        }
+      }
+      
       if (!value) {
         setDisplayPayload("");
         setRawTx("");
         return;
       }
+      
       // Pretty-print JSON for display; extract rawTx if present
       try {
         const parsed = JSON.parse(value);
@@ -90,6 +112,37 @@ export default function BroadcastPage() {
       <div className="min-h-screen bg-background text-foreground">
         <div className="w-full max-w-md mx-auto px-4 py-8">
           <h1 className="text-2xl font-bold mb-4">Decoded Payload</h1>
+          
+          {/* Multi-QR Metadata Display */}
+          {metadata?.type === 'multi' && (
+            <div className="mb-4 rounded-xl overflow-hidden border border-blue-300 bg-blue-50 shadow">
+              <div className="px-4 py-2 border-b border-blue-200 text-xs text-blue-800">
+                Multi-part transaction
+              </div>
+              <div className="p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-blue-700">Parts assembled:</span>
+                  <span className="font-medium text-blue-900">{metadata.totalParts}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-blue-700">Scan duration:</span>
+                  <span className="font-medium text-blue-900">
+                    {metadata.scanDuration ? `${Math.round(metadata.scanDuration / 1000)}s` : 'Unknown'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-blue-700">Parts order:</span>
+                  <span className="font-medium text-blue-900 font-mono text-xs">
+                    {metadata.partsOrder?.join(' → ') || 'Unknown'}
+                  </span>
+                </div>
+                <div className="text-xs text-blue-600 mt-2">
+                  ✅ Successfully reconstructed from {metadata.totalParts} QR code parts
+                </div>
+              </div>
+            </div>
+          )}
+          
           {displayPayload ? (
             <div className="mb-4 rounded-xl overflow-hidden border border-[var(--app-card-border)] bg-[var(--app-card-bg)] shadow">
               <div className="px-4 py-2 border-b border-[var(--app-card-border)] text-xs text-[var(--app-foreground-muted)]">
