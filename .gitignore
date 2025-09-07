@@ -3,3 +3,7 @@
 node_modules/
 build/
 ui/tui/build/
+vendor/
+third-party/
+ui/tui/vendor/
+ui/tui/third-party/
