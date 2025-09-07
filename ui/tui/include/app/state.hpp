@@ -8,6 +8,7 @@
 #include <atomic>
 #include <stdexcept>
 #include <functional>
+#include "qr_generator.hpp"
 
 namespace app {
 
@@ -166,6 +167,7 @@ public:
   std::atomic<bool> has_unsigned{false};
   std::string signed_hex;
   std::atomic<bool> has_signed{false};
+  std::vector<app::QRCode> qr_codes;
   
   // UI state
   std::string status;
