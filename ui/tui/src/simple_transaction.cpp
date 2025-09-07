@@ -1037,7 +1037,7 @@ int RunSimpleTransaction() {
     
     // Main content
     ui_elements.push_back(content | border | flex);
-    
+
     // Help system
     if (show_help) {
       ui_elements.push_back(vbox({

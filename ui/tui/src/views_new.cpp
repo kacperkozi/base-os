@@ -889,6 +889,7 @@ Component ResultView(AppState& s) {
         auto& qrCode = s.qr_codes[current_qr_part];
         
         if (qrCode.size > 0) {
+
           // Determine which QR code to use based on terminal width and multi-part status
           auto screen = ScreenInteractive::FitComponent();
           int width = screen.dimx();
@@ -901,6 +902,7 @@ Component ResultView(AppState& s) {
           } else {
             qrAscii = qrCode.toRobustAscii();
           }
+
           
           std::istringstream stream(qrAscii);
           std::string line;
