@@ -451,11 +451,6 @@ int RunSimpleTransaction() {
     
     // Transaction input form navigation - MUST COME BEFORE GLOBAL KEYS
     if (current_screen == Screen::TRANSACTION_INPUT) {
-      // Special: F2 to continue to next screen
-      if (event.input() == "F2") {
-        navigate_to_screen(Screen::CONFIRMATION);
-        return true;
-      }
       // Track Tab navigation for visual focus indicator
       if (event == Event::Tab) {
         focused_element = (focused_element + 1) % 5;
@@ -473,9 +468,19 @@ int RunSimpleTransaction() {
       if (event == Event::Backspace) {
         return false; // Let the input handle backspace for deletion
       }
-      // Allow Enter to work in input fields (for multiline or submit)
+      // Enter behavior: if on last field (Gas Limit, index 4), continue to next screen
+      // Otherwise, move to next field like Tab
       if (event == Event::Return) {
-        return false; // Let the input handle enter
+        if (focused_element == 4) {
+          // On last field, Enter continues to confirmation
+          navigate_to_screen(Screen::CONFIRMATION);
+          return true;
+        } else {
+          // On other fields, Enter moves to next field
+          focused_element = (focused_element + 1) % 5;
+          input_container->OnEvent(Event::Tab);
+          return true;
+        }
       }
       // Allow ALL character input to pass through to the focused input
       // This includes j, k, ?, and any other character
@@ -807,7 +812,7 @@ int RunSimpleTransaction() {
             text("  "),
             text("[Tab] Navigate") | color(Color::Blue),
             text("  "),
-            text("[F2] Continue") | color(Color::Green)
+            text("[Enter] Next Field / Continue") | color(Color::Green)
           }) | center
         });
         break;
