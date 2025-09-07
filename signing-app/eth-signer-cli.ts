@@ -5,13 +5,23 @@
  * 
  * Usage:
  *   npx ts-node eth-signer-cli.ts --to 0x0000000000000000000000000000000000000000 --amount 0.1 --nonce 0
+ *   npx ts-node eth-signer-cli.ts --to 0x0000000000000000000000000000000000000000 --amount 0.1 --nonce 0 --quiet
+ * 
+ * Options:
+ *   --to <address>     Recipient Ethereum address (required)
+ *   --amount <value>   Amount in ETH to transfer (required)
+ *   --nonce <number>   Transaction nonce (optional, defaults to 0)
+ *   --gasPrice <gwei>  Gas price in gwei (optional, defaults to 0.027 gwei)
+ *   --gasLimit <limit> Gas limit (optional, defaults to 21000)
+ *   --chainId <id>     Chain ID (optional, defaults to 1 for Ethereum mainnet)
+ *   --quiet            Only output minified JSON result (optional)
  * 
  * This script will:
  * 1. Connect to the first available Ledger device
  * 2. Get the Ethereum address for the default derivation path
  * 3. Build a simple ETH transfer transaction
  * 4. Sign the transaction with the Ledger device
- * 5. Output the signed raw transaction as a hex string
+ * 5. Output the signed raw transaction as a hex string (or minified JSON if --quiet)
  */
 
 import { ethers } from 'ethers';
@@ -27,6 +37,7 @@ interface TransactionOptions {
   gasPrice?: string;
   gasLimit?: string;
   chainId?: string;
+  quiet?: boolean;
 }
 
 interface ParsedOptions {
@@ -36,6 +47,7 @@ interface ParsedOptions {
   gasPrice: ethers.BigNumber;
   gasLimit: number;
   chainId: number;
+  quiet: boolean;
 }
 
 interface LedgerDevice {
@@ -62,17 +74,34 @@ const DEFAULT_CHAIN_ID = 1; // Ethereum mainnet
 const DEFAULT_GAS_LIMIT = 21000; // Standard ETH transfer gas limit
 const DEFAULT_GAS_PRICE = ethers.utils.parseUnits('0.027', 'gwei'); // 20 gwei
 
+// Global quiet mode flag
+let quietMode = false;
+
+// Helper function for conditional logging
+function log(...args: any[]): void {
+  if (!quietMode) {
+    console.log(...args);
+  }
+}
+
 // Parse command line arguments
 function parseArgs(): TransactionOptions {
   const args = process.argv.slice(2);
   const options: Partial<TransactionOptions> = {};
   
-  for (let i = 0; i < args.length; i += 2) {
-    const key = args[i].replace('--', '') as keyof TransactionOptions;
-    const value = args[i + 1];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     
-    if (key === 'to' || key === 'amount' || key === 'nonce' || key === 'gasPrice' || key === 'gasLimit' || key === 'chainId') {
-      options[key] = value;
+    if (arg === '--quiet') {
+      options.quiet = true;
+    } else if (arg.startsWith('--')) {
+      const key = arg.replace('--', '') as keyof TransactionOptions;
+      const value = args[i + 1];
+      
+      if (key === 'to' || key === 'amount' || key === 'nonce' || key === 'gasPrice' || key === 'gasLimit' || key === 'chainId') {
+        options[key] = value;
+        i++; // Skip the value in next iteration
+      }
     }
   }
   
@@ -100,40 +129,41 @@ function validateArgs(options: TransactionOptions): ParsedOptions {
     nonce: options.nonce ? parseInt(options.nonce) : 0,
     gasPrice: options.gasPrice ? ethers.utils.parseUnits(options.gasPrice, 'gwei') : DEFAULT_GAS_PRICE,
     gasLimit: options.gasLimit ? parseInt(options.gasLimit) : DEFAULT_GAS_LIMIT,
-    chainId: options.chainId ? parseInt(options.chainId) : DEFAULT_CHAIN_ID
+    chainId: options.chainId ? parseInt(options.chainId) : DEFAULT_CHAIN_ID,
+    quiet: options.quiet || false
   };
 }
 
 // Get the first available Ledger device
 async function getLedgerDevice(): Promise<string> {
-  console.log('🔍 Looking for Ledger devices...');
+  log('🔍 Looking for Ledger devices...');
   
   const devices = await TransportNodeHid.list();
   if (devices.length === 0) {
     throw new Error('No Ledger devices found. Please connect your Ledger device and make sure the Ethereum app is open.');
   }
   
-  console.log(`✅ Found ${devices.length} Ledger device(s)`);
+  log(`✅ Found ${devices.length} Ledger device(s)`);
   return devices[0].path;
 }
 
 // Connect to Ledger and get Ethereum app instance
 async function connectToLedger(devicePath: string): Promise<{ transport: TransportNodeHid; eth: Eth }> {
-  console.log('🔌 Connecting to Ledger device...');
+  log('🔌 Connecting to Ledger device...');
   
   const transport = await TransportNodeHid.open(devicePath);
   const eth = new Eth(transport);
   
-  console.log('✅ Connected to Ledger device');
+  log('✅ Connected to Ledger device');
   return { transport, eth };
 }
 
 // Get address from Ledger
 async function getAddress(eth: Eth, derivationPath: string = DEFAULT_DERIVATION_PATH): Promise<string> {
-  console.log(`📍 Getting address for derivation path: ${derivationPath}`);
+  log(`📍 Getting address for derivation path: ${derivationPath}`);
   
   const result: EthAddress = await eth.getAddress(derivationPath, false, false);
-  console.log(`✅ Address: ${result.address}`);
+  log(`✅ Address: ${result.address}`);
   
   return result.address;
 }
@@ -148,7 +178,7 @@ function buildTransaction(
   gasLimit: number,
   chainId: number
 ): ethers.utils.UnsignedTransaction {
-  console.log('🔨 Building transaction...');
+  log('🔨 Building transaction...');
   
   const transaction: ethers.utils.UnsignedTransaction = {
     to: to,
@@ -160,14 +190,14 @@ function buildTransaction(
     type: 0 // Legacy transaction
   };
   
-  console.log('📋 Transaction details:');
-  console.log(`   From: ${from}`);
-  console.log(`   To: ${to}`);
-  console.log(`   Amount: ${ethers.utils.formatEther(amount)} ETH`);
-  console.log(`   Nonce: ${nonce}`);
-  console.log(`   Gas Price: ${ethers.utils.formatUnits(gasPrice, 'gwei')} gwei`);
-  console.log(`   Gas Limit: ${gasLimit}`);
-  console.log(`   Chain ID: ${chainId}`);
+  log('📋 Transaction details:');
+  log(`   From: ${from}`);
+  log(`   To: ${to}`);
+  log(`   Amount: ${ethers.utils.formatEther(amount)} ETH`);
+  log(`   Nonce: ${nonce}`);
+  log(`   Gas Price: ${ethers.utils.formatUnits(gasPrice, 'gwei')} gwei`);
+  log(`   Gas Limit: ${gasLimit}`);
+  log(`   Chain ID: ${chainId}`);
   
   return transaction;
 }
@@ -198,12 +228,12 @@ function serializeTransaction(transaction: ethers.utils.UnsignedTransaction): st
 
 // Sign transaction with Ledger
 async function signTransaction(eth: Eth, derivationPath: string, rawTxHex: string): Promise<EthSignature> {
-  console.log('✍️  Signing transaction with Ledger...');
-  console.log('   Please confirm the transaction on your Ledger device');
+  log('✍️  Signing transaction with Ledger...');
+  log('   Please confirm the transaction on your Ledger device');
   
   try {
     const signature: EthSignature = await eth.signTransaction(derivationPath, rawTxHex, null);
-    console.log('✅ Transaction signed successfully');
+    log('✅ Transaction signed successfully');
     
     return signature;
   } catch (error: any) {
@@ -290,12 +320,15 @@ function createSignedTransaction(
 // Main function
 async function main(): Promise<void> {
   try {
-    console.log('🚀 Ethereum Ledger Signer CLI (TypeScript)');
-    console.log('==========================================\n');
-    
     // Parse and validate arguments
     const rawOptions = parseArgs();
     const options = validateArgs(rawOptions);
+    
+    // Set global quiet mode
+    quietMode = options.quiet;
+    
+    log('🚀 Ethereum Ledger Signer CLI (TypeScript)');
+    log('==========================================\n');
     
     // Get Ledger device
     const devicePath = await getLedgerDevice();
@@ -327,7 +360,7 @@ async function main(): Promise<void> {
       const rawTxHex = serializeTransaction(transaction);
       
       // Display unsigned transaction hex
-      console.log(`📄 Unsigned Transaction Hex: 0x${rawTxHex}`);
+      log(`📄 Unsigned Transaction Hex: 0x${rawTxHex}`);
       
       // Sign transaction
       const signature = await signTransaction(eth, DEFAULT_DERIVATION_PATH, rawTxHex);
@@ -338,19 +371,19 @@ async function main(): Promise<void> {
       //   v: "422d"
       // }
 
-      console.log('Signature:', signature);
+      log('Signature:', signature);
 
 
         // Display signature components
-        console.log('\n🔐 Signature Components:');
-        console.log(JSON.stringify({
+        log('\n🔐 Signature Components:');
+        log(JSON.stringify({
           r: trimLeadingZero(signature.r.startsWith('0x') ? signature.r : '0x' + signature.r),
           s: trimLeadingZero(signature.s.startsWith('0x') ? signature.s : '0x' + signature.s),
           v: signature.v
         }, null, 2));
 
-        console.log('Transaction:');
-        console.log(JSON.stringify(transaction));
+        log('Transaction:');
+        log(JSON.stringify(transaction));
         
       // Create final signed transaction
       const signedTx = createSignedTransaction(transaction, signature);
@@ -407,64 +440,81 @@ async function main(): Promise<void> {
         }))).slice(2, 18) // First 8 bytes as checksum
       };
       
-      console.log('\n🎉 SUCCESS!');
-      console.log('============');
-      console.log(`Signed Raw Transaction: ${signedTx}`);
-      console.log(`Transaction Hash: ${txHash}`);
+      log('\n🎉 SUCCESS!');
+      log('============');
+      log(`Signed Raw Transaction: ${signedTx}`);
+      log(`Transaction Hash: ${txHash}`);
       
       // Debug: Decode the signed transaction
-      console.log('\n🔍 Transaction Decoding Debug:');
+      log('\n🔍 Transaction Decoding Debug:');
       try {
         const decoded = ethers.utils.parseTransaction(signedTx);
-        console.log('✅ Transaction decoded successfully:');
-        console.log('  Nonce:', decoded.nonce);
-        console.log('  Gas Price:', decoded.gasPrice?.toString());
-        console.log('  Gas Limit:', decoded.gasLimit?.toString());
-        console.log('  To:', decoded.to);
-        console.log('  Value:', decoded.value?.toString());
-        console.log('  Chain ID:', decoded.chainId);
-        console.log('  V:', decoded.v);
-        console.log('  R:', decoded.r);
-        console.log('  S:', decoded.s);
+        log('✅ Transaction decoded successfully:');
+        log('  Nonce:', decoded.nonce);
+        log('  Gas Price:', decoded.gasPrice?.toString());
+        log('  Gas Limit:', decoded.gasLimit?.toString());
+        log('  To:', decoded.to);
+        log('  Value:', decoded.value?.toString());
+        log('  Chain ID:', decoded.chainId);
+        log('  V:', decoded.v);
+        log('  R:', decoded.r);
+        log('  S:', decoded.s);
         
         // Recover sender address from signature
         if (decoded.from) {
-          console.log('  From (recovered):', decoded.from);
+          log('  From (recovered):', decoded.from);
         } else {
-          console.log('  From (recovered): Unable to recover sender address');
+          log('  From (recovered): Unable to recover sender address');
         }
       } catch (error: any) {
-        console.log('❌ Failed to decode transaction:', error.message);
+        log('❌ Failed to decode transaction:', error.message);
       }
       
-      console.log('\n📄 Final JSON Object:');
-      console.log(JSON.stringify(finalJson, null, 2));
+      log('\n📄 Final JSON Object:');
+      log(JSON.stringify(finalJson, null, 2));
       
-      // Generate QR code with minified JSON
       const minifiedJson = JSON.stringify(finalJson);
-      console.log('\n📱 QR Code (Minified JSON):');
-      qrcode.generate(minifiedJson, { small: true });
       
+      // In quiet mode, only output the minified JSON
+      if (quietMode) {
+        console.log(minifiedJson);
+      } else {   // Generate QR code with minified JSON
+        log('\n📱 QR Code (Minified JSON):');
+        qrcode.generate(minifiedJson, { small: true });
+      }
+
     } finally {
       // Always close the transport
       await transport.close();
-      console.log('\n🔌 Disconnected from Ledger device');
+      log('\n🔌 Disconnected from Ledger device');
     }
     
   } catch (error: any) {
-    console.error('\n❌ Error:', error.message);
+    if (quietMode) {
+      console.error(error.message);
+    } else {
+      console.error('\n❌ Error:', error.message);
+    }
     process.exit(1);
   }
 }
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error: Error) => {
-  console.error('\n❌ Uncaught Exception:', error.message);
+  if (quietMode) {
+    console.error(error.message);
+  } else {
+    console.error('\n❌ Uncaught Exception:', error.message);
+  }
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
-  console.error('\n❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  if (quietMode) {
+    console.error('Unhandled Rejection:', reason);
+  } else {
+    console.error('\n❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  }
   process.exit(1);
 });
 

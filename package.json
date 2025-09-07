@@ -1,0 +1,33 @@
+{
+  "name": "base-os-wallet-detector",
+  "version": "1.0.0",
+  "description": "Base OS Wallet Detector TUI - Continuous USB wallet monitoring",
+  "main": "wallet-detector-tui.ts",
+  "scripts": {
+    "start": "npx ts-node wallet-detector-tui.ts",
+    "detect": "npx ts-node wallet-detector-tui.ts",
+    "build": "tsc",
+    "dev": "npx ts-node --watch wallet-detector-tui.ts"
+  },
+  "keywords": [
+    "ledger",
+    "wallet",
+    "detector",
+    "tui",
+    "usb",
+    "ethereum",
+    "base-os"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@ledgerhq/hw-app-eth": "^6.33.6",
+    "@ledgerhq/hw-transport-node-hid": "^6.28.4",
+    "ethers": "^5.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0"
+  }
+}
