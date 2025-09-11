@@ -1,9 +1,35 @@
 #include "app/qr_generator.hpp"
-#include "qrcodegen.hpp"
+#include "app/qrcodegen.hpp"
 #include <sstream>
 #include <cmath>
+#include <stdexcept>
 
 namespace app {
+
+std::vector<uint8_t> hex_to_bytes(const std::string& hex) {
+    std::vector<uint8_t> bytes;
+    
+    if (hex.empty()) {
+        return bytes;
+    }
+    
+    std::string hex_str = hex;
+    if (hex_str.size() >= 2 && hex_str.substr(0, 2) == "0x") {
+        hex_str = hex_str.substr(2);
+    }
+    
+    if (hex_str.length() % 2 != 0) {
+        throw std::invalid_argument("Hex string must have even length");
+    }
+    
+    for (size_t i = 0; i < hex_str.length(); i += 2) {
+        std::string byte_string = hex_str.substr(i, 2);
+        uint8_t byte = static_cast<uint8_t>(std::stoul(byte_string, nullptr, 16));
+        bytes.push_back(byte);
+    }
+    
+    return bytes;
+}
 
 std::string QRCode::toRobustAscii() const {
   if (modules.empty()) return "(No QR data)";
@@ -70,18 +96,63 @@ std::string QRCode::toCompactAscii() const {
   
   return result;
 }
-  
-QRCode GenerateQR(const std::string& data) {
+
+std::string QRCode::toHalfBlockAscii() const {
+  if (!cached_ascii.empty()) {
+    return cached_ascii;
+  }
+  if (modules.empty()) return "(No QR data)";
+
+  std::stringstream result;
+  const std::string top_half_black = "▀";
+  const std::string bottom_half_black = "▄";
+  const std::string both_halves_black = "█";
+  const std::string both_halves_white = " ";
+  const int quiet_zone = 1;
+
+  // Top quiet zone
+  for (int i = 0; i < quiet_zone; ++i) {
+      result << std::string(size + quiet_zone * 2, ' ') << '\n';
+  }
+
+  for (int y = 0; y < size; y += 2) {
+    result << std::string(quiet_zone, ' ');
+    for (int x = 0; x < size; ++x) {
+      bool top_module = modules[y][x];
+      bool bottom_module = (y + 1 < size) ? modules[y + 1][x] : false;
+
+      if (top_module && bottom_module) {
+        result << both_halves_black;
+      } else if (top_module) {
+        result << top_half_black;
+      } else if (bottom_module) {
+        result << bottom_half_black;
+      } else {
+        result << both_halves_white;
+      }
+    }
+    result << std::string(quiet_zone, ' ') << '\n';
+  }
+
+  // Bottom quiet zone
+  for (int i = 0; i < quiet_zone; ++i) {
+      result << std::string(size + quiet_zone * 2, ' ') << '\n';
+  }
+
+  cached_ascii = result.str();
+  return cached_ascii;
+}
+
+QRCode GenerateQR(const std::vector<uint8_t>& data, qrcodegen::QrCode::Ecc ecc) {
   QRCode qr;
   
   try {
-    // Manually create segments to gain more control over generation
-    std::vector<qrcodegen::QrSegment> segs = qrcodegen::QrSegment::makeSegments(data.c_str());
+    std::vector<qrcodegen::QrSegment> segs;
+    segs.push_back(qrcodegen::QrSegment::makeBytes(data));
     
-    // Use encodeSegments to specify advanced parameters
     qrcodegen::QrCode qrCode = qrcodegen::QrCode::encodeSegments(
       segs,
-      qrcodegen::QrCode::Ecc::LOW,
+      ecc,
       1, 40, -1, true
     );
     
@@ -94,19 +165,32 @@ QRCode GenerateQR(const std::string& data) {
       }
     }
   } catch (const std::exception& e) {
-    // Fallback for safety, though should be rare.
     qr.size = 0;
   }
   
   return qr;
 }
+  
+QRCode GenerateQR(const std::string& data, qrcodegen::QrCode::Ecc ecc) {
+  std::vector<uint8_t> bytes(data.begin(), data.end());
+  return GenerateQR(bytes, ecc);
+}
 
-std::vector<QRCode> GenerateQRs(const std::string& data, size_t max_length) {
+std::vector<QRCode> GenerateQRs(const std::vector<uint8_t>& data, size_t max_length, qrcodegen::QrCode::Ecc ecc) {
   std::vector<QRCode> qrs;
   
-  // If data fits in a single QR code, return it as a single-part QR
-  if (data.length() <= max_length) {
-    QRCode qr = GenerateQR(data);
+  const size_t MAX_TOTAL_SIZE = 100000;
+  const size_t MAX_QR_PARTS = 1000;
+  const size_t MIN_CHUNK_SIZE = 10;
+  
+  if (data.empty() || data.size() > MAX_TOTAL_SIZE) {
+    return qrs;
+  }
+  
+  max_length = std::max(max_length, MIN_CHUNK_SIZE);
+  
+  if (data.size() <= max_length) {
+    QRCode qr = GenerateQR(data, ecc);
     if (qr.size > 0) {
       qr.part = 1;
       qr.total_parts = 1;
@@ -115,24 +199,37 @@ std::vector<QRCode> GenerateQRs(const std::string& data, size_t max_length) {
     return qrs;
   }
 
-  // Calculate number of parts needed
-  int num_parts = static_cast<int>(std::ceil(static_cast<double>(data.length()) / max_length));
+  size_t num_parts = (data.size() + max_length - 1) / max_length;
   
-  for (int i = 0; i < num_parts; ++i) {
-    // Create part header like "P1/3:"
+  if (num_parts > MAX_QR_PARTS) {
+    return qrs;
+  }
+  
+  int parts_count = static_cast<int>(num_parts);
+  
+  for (int i = 0; i < parts_count; ++i) {
     std::string part_header = "P" + std::to_string(i + 1) + "/" + std::to_string(num_parts) + ":";
+    std::vector<uint8_t> header_bytes(part_header.begin(), part_header.end());
     
-    // Extract chunk of data
-    size_t start = i * max_length;
-    size_t length = std::min(max_length, data.length() - start);
-    std::string chunk = part_header + data.substr(start, length);
+    size_t start = static_cast<size_t>(i) * max_length;
+    
+    if (start >= data.size()) {
+      break;
+    }
+    
+    size_t length = std::min(max_length, data.size() - start);
+    
+    std::vector<uint8_t> chunk;
+    chunk.insert(chunk.end(), header_bytes.begin(), header_bytes.end());
+    chunk.insert(chunk.end(), data.begin() + start, data.begin() + start + length);
 
     try {
-      // Generate QR code for this chunk
-      std::vector<qrcodegen::QrSegment> segs = qrcodegen::QrSegment::makeSegments(chunk.c_str());
+      std::vector<qrcodegen::QrSegment> segs;
+      segs.push_back(qrcodegen::QrSegment::makeBytes(chunk));
+      
       qrcodegen::QrCode qrCode = qrcodegen::QrCode::encodeSegments(
         segs,
-        qrcodegen::QrCode::Ecc::LOW,
+        ecc,
         1, 40, -1, true
       );
       
@@ -149,7 +246,6 @@ std::vector<QRCode> GenerateQRs(const std::string& data, size_t max_length) {
       }
       qrs.push_back(qr);
     } catch (const std::exception& e) {
-      // If this chunk fails, create an empty QR to maintain part numbering
       QRCode qr;
       qr.size = 0;
       qr.part = i + 1;
@@ -159,6 +255,11 @@ std::vector<QRCode> GenerateQRs(const std::string& data, size_t max_length) {
   }
 
   return qrs;
+}
+
+std::vector<QRCode> GenerateQRs(const std::string& data, size_t max_length, qrcodegen::QrCode::Ecc ecc) {
+  std::vector<uint8_t> bytes(data.begin(), data.end());
+  return GenerateQRs(bytes, max_length, ecc);
 }
 
 } // namespace app
