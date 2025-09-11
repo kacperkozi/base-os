@@ -7,4 +7,5 @@ Base OS is a minimal, bootable operating system on a USB stick that transforms a
 - `base-os/`: Contains the configuration and build scripts for the bootable Debian Linux distribution.
 - `signing-app/`: The command-line application for transaction construction and signing.
 - `mini-app-broadcaster/`: A mobile application to broadcast the signed transaction to the Base network.
+- `ui/`: User interface components and terminal user interface (TUI) implementation.
 - `docs/`: Project documentation, including the technical product requirements.
